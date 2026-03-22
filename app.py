@@ -238,50 +238,69 @@ if teams_data:
                 "מיקום אחרון": f"{team.get('lat', 0):.4f}, {team.get('lon', 0):.4f}"
             })
 
-   # --- 6. טבלת בקרה וסיכום כוחות ---
+# --- 6. טבלת בקרה וסיכום כוחות עם סטטוס דינמי ---
 st.markdown("---")
 st.subheader("📊 סיכום סטטוס כוחות בשטח")
 
 if teams_data:
     table_rows = []
     israel_tz = pytz.timezone('Asia/Jerusalem')
+    now = datetime.now(israel_tz)
     
     for team in teams_data:
         if team.get('active'):
-            # שליפת זמן דיווח אחרון
-            last_seen = team.get('last_seen', 'טרם דווח')
+            # 1. שליפת זמן דיווח אחרון וחישוב סטטוס
+            last_seen_str = team.get('last_seen', '')
+            status_emoji = "⚪" # ברירת מחדל
             
+            try:
+                # הפיכת מחרוזת הזמן לאובייקט זמן להשוואה
+                last_time = datetime.strptime(last_seen_str, "%H:%M:%S").replace(
+                    year=now.year, month=now.month, day=now.day
+                )
+                last_time = israel_tz.localize(last_time)
+                
+                # חישוב הפרש דקות
+                diff_minutes = (now - last_time).total_seconds() / 60
+                
+                if diff_minutes <= 15:
+                    status_emoji = "🟢" # פעיל (עד 15 דקות)
+                elif diff_minutes <= 30:
+                    status_emoji = "🟡" # השהייה (15-30 דקות)
+                else:
+                    status_emoji = "🔴" # נתק/לא פעיל (מעל 30 דקות)
+            except:
+                status_emoji = "🔴"
+
+            # 2. הוספת שורה לטבלה
             table_rows.append({
-                "סטטוס": "🟢",
+                "סטטוס": status_emoji,
                 "שם הצוות": team.get('name'),
                 "קוד מפקד": team.get('code'),
                 "חברי צוות": ", ".join(team.get('members', [])) if team.get('members') else "אין רשימה",
-                "שעת עדכון": last_seen,
-                "קו רוחב (Lat)": team.get('lat', 0),
-                "קו אורך (Lon)": team.get('lon', 0)
+                "עדכון אחרון": last_seen_str,
+                "מיקום": f"{team.get('lat', 0):.4f}, {team.get('lon', 0):.4f}"
             })
 
     if table_rows:
         df = pd.DataFrame(table_rows)
         
-        # תצוגת המדדים בראש הטבלה
-        m1, m2 = st.columns(2)
+        # תצוגת מדדים וכפתור הורדה בשורה אחת
+        m1, m2 = st.columns([1, 1])
         m1.metric("סה\"כ צוותים פעילים", len(table_rows))
         
-        # יצירת קובץ ה-CSV לייצוא
+        # הכנת קובץ אקסל (CSV בקידוד עברית)
         csv = df.to_csv(index=False, encoding='utf-16', sep='\t').encode('utf-16')
-        
         m2.download_button(
-            label='📥 הורד דו"ח מצב לאקסל (Excel)', # שימוש במרכאות בודדות מסביב פותר את השגיאה
+            label='📥 הורד דו"ח מצב לאקסל',
             data=csv,
-            file_name=f"shavtsakedem_report_{datetime.now().strftime('%d_%m_%Y_%H%M')}.csv",
+            file_name=f"report_{now.strftime('%d_%m_%H%M')}.csv",
             mime='text/csv',
         )
         
-        # הצגת הטבלה עצמה
+        # הצגת הטבלה
         st.dataframe(df, use_container_width=True, hide_index=True)
-        
     else:
-        st.info("ממתין לדיווח ראשון מהשטח...")
+        st.info("ממתין לדיווחים מהשטח...")
 else:
     st.warning("לא נמצאו נתוני צוותים בבסיס הנתונים.")
