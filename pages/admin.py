@@ -9,16 +9,29 @@ def init_firebase():
     if not firebase_admin._apps:
         try:
             if "firebase" in st.secrets:
-                creds_dict = json.loads(json.dumps(st.secrets["firebase"]))
-                # השורה הזו מטפלת בבעיה של ה-\n אם הוא בכל זאת מגיע כטקסט
-                creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+                creds_dict = dict(st.secrets["firebase"])
+
+                # 🔥 תיקון קריטי
+                private_key = creds_dict["private_key"]
                 
+                # אם יש שורות אמיתיות → זה בסדר
+                # אם יש \n → נהפוך אותם
+                if "\\n" in private_key:
+                    private_key = private_key.replace("\\n", "\n")
+
+                creds_dict["private_key"] = private_key
+
                 cred = credentials.Certificate(creds_dict)
+
                 firebase_admin.initialize_app(cred, {
                     'databaseURL': "https://shavtsakedem-default-rtdb.europe-west1.firebasedatabase.app/"
                 })
+
+                st.success("🔥 Firebase initialized")
+
             else:
-                st.error("❌ לא נמצאו הגדרות ב-Secrets")
+                st.error("❌ לא נמצאו secrets")
+
         except Exception as e:
             st.error(f"❌ שגיאה באתחול: {e}")
 
