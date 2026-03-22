@@ -37,6 +37,17 @@ def init_firebase():
 
 init_firebase()
 
+def get_teams_from_db():
+    try:
+        ref = db.reference('teams')
+        teams = ref.get()
+        if not teams: return []
+        if isinstance(teams, dict):
+            return [v for v in teams.values() if v is not None]
+        return [t for t in teams if t is not None]
+    except Exception as e:
+        return []
+
 # --- 2. הגדרות דף ---
 st.set_page_config(page_title="ניהול מערכת שווים", layout="wide")
 
