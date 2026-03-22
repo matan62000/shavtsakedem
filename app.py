@@ -238,14 +238,51 @@ if teams_data:
                 "מיקום אחרון": f"{team.get('lat', 0):.4f}, {team.get('lon', 0):.4f}"
             })
 
+   # --- 6. טבלת בקרה וסיכום כוחות ---
+st.markdown("---")
+st.subheader("📊 סיכום סטטוס כוחות בשטח")
+
+if teams_data:
+    table_rows = []
+    israel_tz = pytz.timezone('Asia/Jerusalem')
+    
+    for team in teams_data:
+        if team.get('active'):
+            # שליפת זמן דיווח אחרון
+            last_seen = team.get('last_seen', 'טרם דווח')
+            
+            table_rows.append({
+                "סטטוס": "🟢",
+                "שם הצוות": team.get('name'),
+                "קוד מפקד": team.get('code'),
+                "חברי צוות": ", ".join(team.get('members', [])) if team.get('members') else "אין רשימה",
+                "שעת עדכון": last_seen,
+                "קו רוחב (Lat)": team.get('lat', 0),
+                "קו אורך (Lon)": team.get('lon', 0)
+            })
+            
     if table_rows:
         df = pd.DataFrame(table_rows)
-        # תצוגת טבלה מעוצבת של Streamlit
+        
+        # תצוגת המדדים בראש הטבלה
+        m1, m2 = st.columns(2)
+        m1.metric("סה\"כ צוותים פעילים", len(table_rows))
+        
+        # יצירת קובץ ה-CSV לייצוא
+        # שימוש ב-encoding='utf-16' ו-sep='\t' מבטיח שהעברית תיפתח היטב באקסל
+        csv = df.to_csv(index=False, encoding='utf-16', sep='\t').encode('utf-16')
+        
+        m2.download_button(
+            label="📥 הורד דו"ח מצב לאקסל (Excel)",
+            data=csv,
+            file_name=f"shavtsakedem_report_{datetime.now().strftime('%d_%m_%Y_%H%M')}.csv",
+            mime='text/csv',
+        )
+        
+        # הצגת הטבלה עצמה
         st.dataframe(df, use_container_width=True, hide_index=True)
         
-        # בונוס: מונה כוחות מהיר
-        st.metric("סה\"כ צוותים פעילים בשטח", len(table_rows))
     else:
-        st.info("אין צוותים פעילים כרגע.")
+        st.info("ממתין לדיווח ראשון מהשטח...")
 else:
     st.warning("לא נמצאו נתוני צוותים בבסיס הנתונים.")
