@@ -7,16 +7,22 @@ import os
 def init_firebase():
     if not firebase_admin._apps:
         try:
-            # בדיקה אם אנחנו מריצים מקומית עם Secrets או בענן
             if "firebase" in st.secrets:
+                # הפיכה של ה-Secrets למילון רגיל
                 creds_dict = dict(st.secrets["firebase"])
+                
+                # ניקוי המפתח הפרטי מתווים שעלולים להרוס את החתימה
+                if "private_key" in creds_dict:
+                    # מוודא שכל ה-\n הופכים לירידות שורה אמיתיות
+                    creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+                
                 cred = credentials.Certificate(creds_dict)
                 firebase_admin.initialize_app(cred, {
                     'databaseURL': "https://shavtsakedem-default-rtdb.europe-west1.firebasedatabase.app/"
                 })
+                st.success("✅ החיבור ל-Firebase הופעל דרך Secrets")
             else:
-                st.error("❌ לא נמצאו הגדרות Firebase ב-Secrets!")
-                st.stop()
+                st.error("❌ לא נמצא מפתח ב-Secrets")
         except Exception as e:
             st.error(f"❌ שגיאה באתחול: {e}")
 
