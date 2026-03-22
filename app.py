@@ -48,30 +48,22 @@ else:
     }
     """
 
-# --- 2. הזרקת עיצוב (CSS) אחוד ומסודר ---
+# --- 2. הזרקת עיצוב (CSS) ---
 st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Assistant:wght@400;700&display=swap');
-    
-    /* הזרקת הרקע */
     {bg_css}
-
-    /* שכבת תוכן שקופה לקריאות */
     [data-testid="stVerticalBlock"] {{
         background-color: rgba(255, 255, 255, 0.9);
         padding: 25px;
         border-radius: 15px;
         box-shadow: 0 4px 15px rgba(0,0,0,0.3);
     }}
-
-    /* הגדרות שפה ויישור */
     html, body, [data-testid="stSidebar"] {{
         direction: rtl;
         text-align: right;
         font-family: 'Assistant', sans-serif;
     }}
-    
-    /* עיצוב כפתורים */
     div.stButton > button {{ 
         width: 100%; 
         border-radius: 10px; 
@@ -81,12 +73,7 @@ st.markdown(f"""
         color: white;
         border: none;
     }}
-    
-    div.stButton > button:hover {{
-        background-color: #3a7531;
-    }}
-    
-    /* הסתרת ממשק מיותר */
+    div.stButton > button:hover {{ background-color: #3a7531; }}
     #MainMenu {{visibility: hidden;}}
     footer {{visibility: hidden;}}
     header {{visibility: hidden;}}
@@ -127,7 +114,6 @@ def init_firebase():
             st.error(f"שגיאה בחיבור ל-Firebase: {e}")
             st.stop()
 
-# הפעלת רענון וחיבור
 st_autorefresh(interval=30000, limit=None, key="fscounter")
 init_firebase()
 
@@ -145,20 +131,17 @@ def update_team_in_db(team_id, lat, lon):
     try:
         israel_tz = pytz.timezone('Asia/Jerusalem')
         current_time = datetime.now(israel_tz).strftime("%H:%M:%S")
-        
         db.reference(f'teams/{team_id}').update({
-            'lat': lat,
-            'lon': lon,
-            'active': True,
-            'last_seen': current_time # הוספנו שעת דיווח
+            'lat': lat, 'lon': lon, 'active': True, 'last_seen': current_time
         })
         return True
-    except Exception:
-        return False
+    except Exception: return False
 
-# --- 5. תצוגה ---
+# --- 5. לוגיקה ותצוגה ---
 teams_data = get_teams_from_db()
 loc = get_geolocation()
+israel_tz = pytz.timezone('Asia/Jerusalem')
+now = datetime.now(israel_tz)
 
 col1, col2 = st.columns([1, 2])
 
@@ -171,127 +154,77 @@ with col1:
         team_id = found_team.get('id')
         st.success(f"שלום מפקד {found_team.get('name')}")
         
-        # --- מנגנון שידור אוטומטי ---
-        auto_upload = st.toggle("🛰️ שידור מיקום אוטומטי (מומלץ)", value=False, key="auto_up")
+        auto_upload = st.toggle("🛰️ שידור מיקום אוטומטי (חי)", value=False, key="auto_up")
         
         if auto_upload:
-            st.info("המערכת משדרת כעת מיקום באופן אוטומטי. נא להשאיר את הדף פתוח.")
             if loc and 'coords' in loc:
                 lat, lon = loc['coords']['latitude'], loc['coords']['longitude']
-                # עדכון שקט ב-DB ללא הודעות קופצות שיפריעו למפקד
-                update_team_in_db(team_id, lat, lon)
+                # מנגנון מניעת כפילויות - מעדכן רק אם זז מעל 10 מטר
+                last_lat = st.session_state.get('last_lat_sent', 0)
+                if abs(last_lat - lat) > 0.0001:
+                    if update_team_in_db(team_id, lat, lon):
+                        st.session_state.last_lat_sent = lat
+                st.info("🛰️ שידור חי פעיל. נא להשאיר דף פתוח.")
         else:
-            # כפתור ידני למי שמעדיף לשלוט בזה
-            if st.button(f"📍 עדכן מיקום ידני", key=f"btn_{team_id}"):
+            if st.button(f"📍 עדכן מיקום ידני"):
                 if loc and 'coords' in loc:
                     lat, lon = loc['coords']['latitude'], loc['coords']['longitude']
                     if update_team_in_db(team_id, lat, lon):
-                        st.toast("המיקום עודכן!", icon="🚀")
+                        st.toast("עודכן!", icon="🚀")
                         st.rerun()
-                else:
-                    st.error("⚠️ נא לוודא ששירותי המיקום (GPS) פועלים.")
-    
     elif user_code != "":
         st.error("❌ קוד שגוי")
 
 with col2:
     st.subheader("🌍 מפת כוחות בזמן אמת")
-    
-    # הגדרת זמן נוכחי לחישובים
-    israel_tz = pytz.timezone('Asia/Jerusalem')
-    now = datetime.now(israel_tz)
-    
-    # יצירת המפה
     m = folium.Map(location=[31.5, 34.8], zoom_start=8)
     has_active_teams = False
-    table_rows = [] # נכין כבר את הנתונים לטבלה כדי לחסוך לולאה נוספת
+    table_rows = []
 
     for team in teams_data:
         if team.get('active') and 'lat' in team and 'lon' in team:
             has_active_teams = True
-            
-            # 1. חישוב זמן וסטטוס (עבור המפה והטבלה)
             last_seen_str = team.get('last_seen', '')
-            icon_color = "red" # ברירת מחדל
-            status_emoji = "🔴"
+            icon_color, status_emoji = "red", "🔴"
             
             try:
                 last_time = datetime.strptime(last_seen_str, "%H:%M:%S").replace(
-                    year=now.year, month=now.month, day=now.day
-                )
+                    year=now.year, month=now.month, day=now.day)
                 last_time = israel_tz.localize(last_time)
-                diff_minutes = (now - last_time).total_seconds() / 60
-                
-                if diff_minutes <= 15:
-                    icon_color = "green"
-                    status_emoji = "🟢"
-                elif diff_minutes <= 30:
-                    icon_color = "orange"
-                    status_emoji = "🟡"
-                else:
-                    icon_color = "red"
-                    status_emoji = "🔴"
-            except:
-                pass
+                diff = (now - last_time).total_seconds() / 60
+                if diff <= 15: icon_color, status_emoji = "green", "🟢"
+                elif diff <= 30: icon_color, status_emoji = "orange", "🟡"
+            except: pass
 
-            # 2. הוספת סמן למפה עם הצבע המתאים
-            members_html = "<br>".join(team.get('members', [])) or "אין רשימה"
-            popup_html = f"""
-            <div style="direction: rtl; text-align: right; font-family: sans-serif; min-width: 150px;">
-                <b style="color: {icon_color};">צוות: {team.get('name')}</b><br>
-                <hr style="margin: 5px 0;">
-                <b>👥 חברים:</b><br>{members_html}<br>
-                <b>🕒 עדכון:</b> {last_seen_str}
-            </div>
-            """
-            
+            popup_html = f"<div dir='rtl'><b>צוות: {team.get('name')}</b><br>עדכון: {last_seen_str}</div>"
             folium.Marker(
                 location=[team['lat'], team['lon']],
-                popup=folium.Popup(popup_html, max_width=300),
+                popup=folium.Popup(popup_html, max_width=200),
                 tooltip=team.get('name'),
                 icon=folium.Icon(color=icon_color, icon="info-sign")
             ).add_to(m)
 
-            # 3. הכנת שורה לטבלה שמתחת למפה
             table_rows.append({
                 "סטטוס": status_emoji,
                 "שם הצוות": team.get('name'),
                 "קוד מפקד": team.get('code'),
-                "חברי צוות": members_html.replace("<br>", ", "),
+                "חברי צוות": ", ".join(team.get('members', [])) if team.get('members') else "אין רשימה",
                 "עדכון אחרון": last_seen_str,
                 "מיקום": f"{team.get('lat', 0):.4f}, {team.get('lon', 0):.4f}"
             })
     
-    # הצגת המפה
-    st_folium(m, width="100%", height=500)
-    
-    if not has_active_teams:
-        st.info("ממתין לדיווחים מהשטח...")
+    st_folium(m, width="100%", height=500, key="main_map")
+    if not has_active_teams: st.info("ממתין לדיווחים...")
 
-# כפתור רענון ידני
-if st.button("🔄 רענן נתונים עכשיו"):
-    st.rerun()
-
-# --- 6. טבלת בקרה וסיכום (מופיעה פעם אחת בסוף) ---
+# --- 6. טבלת בקרה וסיכום ---
 st.markdown("---")
 st.subheader("📊 סיכום סטטוס כוחות בשטח")
 
 if table_rows:
     df = pd.DataFrame(table_rows)
-    
-    # שורת מדדים וכפתור הורדה
     m1, m2 = st.columns([1, 1])
     m1.metric("סה\"כ צוותים פעילים", len(table_rows))
     
     csv = df.to_csv(index=False, encoding='utf-16', sep='\t').encode('utf-16')
-    m2.download_button(
-        label='📥 הורד דו"ח מצב לאקסל',
-        data=csv,
-        file_name=f"shavtsakedem_{now.strftime('%d_%m_%H%M')}.csv",
-        mime='text/csv',
-    )
-    
-    # הצגת הטבלה
+    m2.download_button('📥 הורד דו"ח לאקסל', csv, f"report_{now.strftime('%H%M')}.csv", 'text/csv')
     st.dataframe(df, use_container_width=True, hide_index=True)
-else:
-    st.warning("אין נתונים להצגה בטבלה.")
