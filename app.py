@@ -12,7 +12,7 @@ from streamlit_autorefresh import st_autorefresh
 # --- 1. הגדרות דף ---
 st.set_page_config(page_title="שבצ''קדם - ניהול בזמן אמת", layout="wide")
 
-# פונקציה לטעינת תמונה (לוגו)
+# פונקציה לטעינת תמונה והמרתה לפורמט שהדפדפן מבין (Base64)
 def get_image_base64(path):
     if not os.path.exists(path):
         return None
@@ -22,16 +22,16 @@ def get_image_base64(path):
     except Exception:
         return None
 
-# הגדרת נתיבים ולינקים (תחליף ללינקים שלך בגיטהאב)
+# טעינת התמונות מהתיקייה הראשית
 logo_path = "kedem.png"
+bg_path = "kedem1.png"
+
 logo_base64 = get_image_base64(logo_path)
-# --- 1. טעינת הרקע (שימוש בשם הקובץ המעודכן) ---
-bg_path = "kedem1.png" # השם המדויק שציינת
 bg_base64 = get_image_base64(bg_path)
 
+# הכנת סטייל הרקע - רק אם התמונה קיימת
 if bg_base64:
-    # שים לב ששיניתי כאן ל-image/png כי הקובץ הוא PNG
-    bg_style = f"""
+    bg_css = f"""
     [data-testid="stAppViewContainer"] {{
         background-image: url("data:image/png;base64,{bg_base64}");
         background-size: cover;
@@ -40,65 +40,51 @@ if bg_base64:
     }}
     """
 else:
-    # גיבוי אם הקובץ לא נמצא
-    bg_style = """
+    bg_css = """
     [data-testid="stAppViewContainer"] {
         background-color: #1e2b1e; 
     }
     """
 
-# --- 2. הזרקת ה-CSS ---
-st.markdown(f"""
-    <style>
-    {bg_style}
-
-    /* שכבת תוכן שקופה כדי שהטקסט יהיה קריא */
-    [data-testid="stVerticalBlock"] {{
-        background-color: rgba(255, 255, 255, 0.9);
-        padding: 30px;
-        border-radius: 20px;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-    }}
-    
-    /* שאר ה-CSS שלך (RTL, כפתורים וכו') */
-    html, body {{ direction: rtl; text-align: right; }}
-    </style>
-    """, unsafe_allow_html=True)
-
-# --- 2. הזרקת עיצוב (CSS) ---
+# --- 2. הזרקת עיצוב (CSS) אחוד ומסודר ---
 st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Assistant:wght@400;700&display=swap');
     
-    [data-testid="stAppViewContainer"] {{
-        background-image: url("{bg_path}");
-        background-size: cover;
-        background-position: center;
-        background-attachment: fixed;
-    }}
+    /* הזרקת הרקע */
+    {bg_css}
 
+    /* שכבת תוכן שקופה לקריאות */
     [data-testid="stVerticalBlock"] {{
         background-color: rgba(255, 255, 255, 0.9);
         padding: 25px;
         border-radius: 15px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
     }}
 
+    /* הגדרות שפה ויישור */
     html, body, [data-testid="stSidebar"] {{
         direction: rtl;
         text-align: right;
         font-family: 'Assistant', sans-serif;
     }}
     
+    /* עיצוב כפתורים */
     div.stButton > button {{ 
         width: 100%; 
         border-radius: 10px; 
-        height: 3em; 
+        height: 3.5em; 
         font-weight: bold; 
         background-color: #2e5a27;
         color: white;
         border: none;
     }}
     
+    div.stButton > button:hover {{
+        background-color: #3a7531;
+    }}
+    
+    /* הסתרת ממשק מיותר */
     #MainMenu {{visibility: hidden;}}
     footer {{visibility: hidden;}}
     header {{visibility: hidden;}}
@@ -119,20 +105,18 @@ st.markdown(f"""
     <hr>
     """, unsafe_allow_html=True)
 
-# --- 4. הגדרת פונקציית Firebase (חייבת לבוא לפני הקריאה לה!) ---
+# --- 4. פונקציות ליבה ו-Firebase ---
 def init_firebase():
     if not firebase_admin._apps:
         try:
             if "firebase_service_account" not in st.secrets:
                 st.error("❌ לא נמצאו הגדרות Firebase ב-Secrets")
                 st.stop()
-
             secret_info = dict(st.secrets["firebase_service_account"])
             if "private_key" in secret_info:
                 pk = secret_info["private_key"]
                 pk = pk.replace("\\n", "\n").strip().strip('"')
                 secret_info["private_key"] = pk
-
             cred = credentials.Certificate(secret_info)
             firebase_admin.initialize_app(cred, {
                 'databaseURL': "https://shavtsakedem-default-rtdb.europe-west1.firebasedatabase.app/"
@@ -141,11 +125,10 @@ def init_firebase():
             st.error(f"שגיאה בחיבור ל-Firebase: {e}")
             st.stop()
 
-# --- 5. הפעלת הפונקציות ---
+# הפעלת רענון וחיבור
 st_autorefresh(interval=30000, limit=None, key="fscounter")
-init_firebase() # עכשיו זה יעבוד כי הפונקציה הוגדרה שורה אחת מעל
+init_firebase()
 
-# --- 3. פונקציות נתונים ---
 def get_teams_from_db():
     try:
         ref = db.reference('teams')
@@ -154,21 +137,17 @@ def get_teams_from_db():
         if isinstance(teams, dict):
             return [v for v in teams.values() if v is not None]
         return [t for t in teams if t is not None]
-    except Exception as e:
-        return []
+    except Exception: return []
 
 def update_team_in_db(team_id, lat, lon):
     try:
         db.reference(f'teams/{team_id}').update({
-            'lat': lat,
-            'lon': lon,
-            'active': True
+            'lat': lat, 'lon': lon, 'active': True
         })
         return True
-    except Exception:
-        return False
+    except Exception: return False
 
-# --- 4. לוגיקה עסקית ותצוגה ---
+# --- 5. תצוגה ---
 teams_data = get_teams_from_db()
 loc = get_geolocation()
 
@@ -177,17 +156,14 @@ col1, col2 = st.columns([1, 2])
 with col1:
     st.subheader("📲 דיווח מפקדים")
     user_code = st.text_input("הכנס קוד מפקד:", type="password")
-    
     found_team = next((t for t in teams_data if str(t.get('code')) == user_code), None)
     
     if found_team:
         team_id = found_team.get('id')
         st.success(f"שלום מפקד {found_team.get('name', 'לא ידוע')}")
-        
         if st.button(f"📍 עדכן מיקום נוכחי ושלח כוחות", key=f"btn_{team_id}"):
             if loc and 'coords' in loc:
-                lat = loc['coords']['latitude']
-                lon = loc['coords']['longitude']
+                lat, lon = loc['coords']['latitude'], loc['coords']['longitude']
                 if update_team_in_db(team_id, lat, lon):
                     st.toast("✅ המיקום עודכן בהצלחה!", icon="🚀")
                     st.rerun()
@@ -198,16 +174,12 @@ with col1:
 
 with col2:
     st.subheader("🌍 מפת כוחות בזמן אמת")
-    
-    m = folium.Map(location=[31.5, 34.8], zoom_start=8, control_scale=True)
-    
+    m = folium.Map(location=[31.5, 34.8], zoom_start=8)
     has_active_teams = False
     for team in teams_data:
         if team.get('active') and 'lat' in team and 'lon' in team:
             has_active_teams = True
-            members = team.get('members', [])
-            members_html = "<br>".join(members) if members else "אין חברים רשומים"
-            
+            members_html = "<br>".join(team.get('members', [])) or "אין חברים רשומים"
             popup_html = f"""
             <div style="direction: rtl; text-align: right; font-family: sans-serif; min-width: 150px;">
                 <b style="color: #4CAF50;">צוות: {team.get('name')}</b><br>
@@ -216,7 +188,6 @@ with col2:
                 <b>🔑 קוד:</b> {team.get('code')}
             </div>
             """
-            
             folium.Marker(
                 location=[team['lat'], team['lon']],
                 popup=folium.Popup(popup_html, max_width=300),
@@ -225,7 +196,6 @@ with col2:
             ).add_to(m)
     
     st_folium(m, width="100%", height=500)
-    
     if not has_active_teams:
         st.info("ממתין לדיווחים מהשטח...")
 
