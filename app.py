@@ -122,11 +122,24 @@ with col2:
     has_active_teams = False
     for team in teams_data:
         if team.get('active') and 'lat' in team and 'lon' in team:
-            has_active_teams = True
+            # 1. הכנת רשימת חברי הצוות כטקסט
+            members = team.get('members', [])
+            members_text = ", ".join(members) if members else "אין חברים רשומים"
+            
+            # 2. בניית תוכן ה-Popup (מה שיופיע כשלוחצים)
+            # אפשר להשתמש ב-HTML בסיסי לעיצוב
+            popup_html = f"""
+            <div style="direction: rtl; text-align: right; font-family: sans-serif;">
+                <b>צוות:</b> {team.get('name')}<br>
+                <b>חברי צוות:</b> {members_text}<br>
+                <b>קוד:</b> {team.get('code')}
+            </div>
+            """
+            
             folium.Marker(
                 location=[team['lat'], team['lon']],
-                popup=f"צוות: {team.get('name')}",
-                tooltip=team.get('name'),
+                popup=folium.Popup(popup_html, max_width=300), # הצגת הפרטים בלחיצה
+                tooltip=team.get('name'), # הצגת השם בריחוף עכבר
                 icon=folium.Icon(color="red", icon="info-sign")
             ).add_to(m)
     
