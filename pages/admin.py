@@ -1,69 +1,93 @@
 import streamlit as st
 import firebase_admin
 from firebase_admin import credentials, db
+import os
 
-# חיבור ל-Firebase
-FIREBASE_URL = "https://shavtsakedem-default-rtdb.europe-west1.firebasedatabase.app/"
+# פונקציה לחיבור בטוח
+def init_firebase():
+    if not firebase_admin._apps:
+        # פתרון לבעיית נתיבים: מחפש את הקובץ בתיקייה שבה נמצא הסקריפט הנוכחי
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        json_path = os.path.join(current_dir, "service_account.json")
+        
+        # אם לא מצא בתיקיית pages (במידה והקובץ בתיקייה הראשית)
+        if not os.path.exists(json_path):
+            parent_dir = os.path.dirname(current_dir)
+            json_path = os.path.join(parent_dir, "service_account.json")
 
-if not firebase_admin._apps:
-    cred = credentials.Certificate("service_account.json")
-    firebase_admin.initialize_app(cred, {'databaseURL': FIREBASE_URL})
+        if os.path.exists(json_path):
+            try:
+                cred = credentials.Certificate(json_path)
+                firebase_admin.initialize_app(cred, {
+                    'databaseURL': "https://shavtsakedem-default-rtdb.europe-west1.firebasedatabase.app/"
+                })
+            except Exception as e:
+                st.error(f"שגיאה פנימית במפתח: {e}")
+                st.stop()
+        else:
+            st.error(f"קובץ service_account.json לא נמצא! וודא שהוא בתיקייה הראשית.")
+            st.stop()
+
+init_firebase()
 
 st.set_page_config(page_title="ניהול מערכת", layout="wide")
 
-# --- מנגנון נעילת דף מנהל ---
-ADMIN_PASSWORD = "Matan4261!" # <--- שנה את זה לקוד שאתה רוצה!
-
+# --- מנגנון נעילה ---
+ADMIN_PASSWORD = "Matan4261!" 
 if "admin_authenticated" not in st.session_state:
     st.session_state["admin_authenticated"] = False
 
 if not st.session_state["admin_authenticated"]:
     st.title("🔐 גישה מוגבלת")
-    pwd_input = st.text_input("הכנס קוד מנהל כדי להמשיך:", type="password")
+    pwd_input = st.text_input("הכנס קוד מנהל:", type="password")
     if st.button("כניסה"):
         if pwd_input == ADMIN_PASSWORD:
             st.session_state["admin_authenticated"] = True
             st.rerun()
         else:
             st.error("קוד שגוי!")
-    st.stop() # עוצר את הרצת שאר הדף אם לא התחברת
+    st.stop()
 
-# --- מכאן והלאה זה הקוד הקיים של דף הניהול ---
-st.markdown("<h1 style='text-align: center;'>⚙️ ממשק ניהול צוותים</h1>", unsafe_allow_html=True)
-if st.button("התנתק"):
-    st.session_state["admin_authenticated"] = False
-    st.rerun()
+st.title("⚙️ ניהול כוחות")
 
-# --- הוספת צוות חדש (הקוד הקודם שלך ממשיך כאן) ---
-with st.expander("➕ הוספת צוות חדש למערכת"):
-    with st.form("add_team_form"):
-        new_name = st.text_input("שם הצוות")
-        new_members = st.text_input("חברי הצוות")
-        new_code = st.text_input("קוד גישה למפקד")
-        submitted = st.form_submit_button("צור צוות")
-        
-        if submitted and new_name and new_code:
-            ref = db.reference('teams')
-            teams = ref.get() or []
-            new_id = len(teams)
-            new_team = {
-                "id": new_id, "name": new_name, "members": new_members,
-                "code": str(new_code), "active": False, "lat": 31.5, "lon": 34.8
-            }
-            db.reference(f'teams/{new_id}').set(new_team)
-            st.success(f"צוות {new_name} נוסף!")
-            st.rerun()
+# תצוגת צוותים (כאן קרתה השגיאה)
+try:
+    ref = db.reference('teams')
+    teams_data = ref.get()
+    
+    if teams_data:
+        # המרה למבנה רשימה אם זה מילון
+        if isinstance(teams_data, dict):
+            teams_list = [v for v in teams_data.values() if v is not None]
+        else:
+            teams_list = [t for t in teams_data if t is not None]
 
-# הצגת רשימת הצוותים (המשך הקוד הקודם...)
-st.subheader("📋 צוותים רשומים")
-teams_data = db.reference('teams').get()
-if teams_data:
-    for team in teams_data:
-        if team:
+        for team in teams_list:
             with st.container(border=True):
-                c1, c2, c3 = st.columns([2, 1, 1])
-                c1.write(f"**{team['name']}**")
-                c2.write(f"🔑 קוד: {team.get('code', 'N/A')}")
-                if c3.button("מחק", key=f"del_{team['id']}"):
-                    db.reference(f'teams/{team["id"]}').delete()
+                col1, col2 = st.columns([4, 1])
+                col1.write(f"**{team.get('name', 'ללא שם')}** | קוד: {team.get('code', 'אין')}")
+                if col2.button("מחק", key=f"del_{team.get('id')}"):
+                    db.reference(f"teams/{team.get('id')}").delete()
                     st.rerun()
+    else:
+        st.info("אין צוותים רשומים כרגע.")
+
+except Exception as e:
+    st.error(f"שגיאה בתקשורת עם Firebase: {e}")
+    st.info("זה קורה בדרך כלל כשהמפתח ב-JSON לא תקין. נסה להוריד מפתח חדש מהקונסול.")
+
+# הוספת צוות חדש (מתחת לרשימה)
+with st.expander("➕ הוספת צוות חדש"):
+    with st.form("add_team"):
+        name = st.text_input("שם הצוות")
+        code = st.text_input("קוד גישה")
+        if st.form_submit_button("שמור"):
+            if name and code:
+                # מציאת ה-ID הפנוי הבא
+                existing = db.reference('teams').get()
+                new_id = len(existing) if existing else 0
+                db.reference(f'teams/{new_id}').set({
+                    "id": new_id, "name": name, "code": str(code), "active": False
+                })
+                st.success("נוסף!")
+                st.rerun()
