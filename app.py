@@ -169,15 +169,28 @@ with col1:
     
     if found_team:
         team_id = found_team.get('id')
-        st.success(f"שלום מפקד {found_team.get('name', 'לא ידוע')}")
-        if st.button(f"📍 עדכן מיקום נוכחי ושלח כוחות", key=f"btn_{team_id}"):
+        st.success(f"שלום מפקד {found_team.get('name')}")
+        
+        # --- מנגנון שידור אוטומטי ---
+        auto_upload = st.toggle("🛰️ שידור מיקום אוטומטי (מומלץ)", value=False, key="auto_up")
+        
+        if auto_upload:
+            st.info("המערכת משדרת כעת מיקום באופן אוטומטי. נא להשאיר את הדף פתוח.")
             if loc and 'coords' in loc:
                 lat, lon = loc['coords']['latitude'], loc['coords']['longitude']
-                if update_team_in_db(team_id, lat, lon):
-                    st.toast("✅ המיקום עודכן בהצלחה!", icon="🚀")
-                    st.rerun()
-            else:
-                st.error("⚠️ נא לאשר גישת GPS בדפדפן.")
+                # עדכון שקט ב-DB ללא הודעות קופצות שיפריעו למפקד
+                update_team_in_db(team_id, lat, lon)
+        else:
+            # כפתור ידני למי שמעדיף לשלוט בזה
+            if st.button(f"📍 עדכן מיקום ידני", key=f"btn_{team_id}"):
+                if loc and 'coords' in loc:
+                    lat, lon = loc['coords']['latitude'], loc['coords']['longitude']
+                    if update_team_in_db(team_id, lat, lon):
+                        st.toast("המיקום עודכן!", icon="🚀")
+                        st.rerun()
+                else:
+                    st.error("⚠️ נא לוודא ששירותי המיקום (GPS) פועלים.")
+    
     elif user_code != "":
         st.error("❌ קוד שגוי")
 
