@@ -25,43 +25,43 @@ def get_image_base64(path):
 # הגדרת נתיבים ולינקים (תחליף ללינקים שלך בגיטהאב)
 logo_path = "kedem.png"
 logo_base64 = get_image_base64(logo_path)
-bg_path = "kedem1.png"
-
+# --- 1. טעינת הרקע (שימוש בשם הקובץ המעודכן) ---
+bg_path = "kedem1.png" # השם המדויק שציינת
 bg_base64 = get_image_base64(bg_path)
 
 if bg_base64:
-    # אם התמונה נמצאה, נשתמש בה כרקע
+    # שים לב ששיניתי כאן ל-image/png כי הקובץ הוא PNG
     bg_style = f"""
     [data-testid="stAppViewContainer"] {{
-        background-image: url("data:image/jpg;base64,{bg_base64}");
+        background-image: url("data:image/png;base64,{bg_base64}");
         background-size: cover;
         background-position: center;
         background-attachment: fixed;
     }}
     """
 else:
-    # אם לא נמצאה, נשים צבע רקע צבאי כהה כדי שלא יהיה לבן משעמם
+    # גיבוי אם הקובץ לא נמצא
     bg_style = """
     [data-testid="stAppViewContainer"] {
         background-color: #1e2b1e; 
     }
     """
 
+# --- 2. הזרקת ה-CSS ---
 st.markdown(f"""
     <style>
     {bg_style}
 
-    /* שכבת תוכן שקופה לקריאות */
+    /* שכבת תוכן שקופה כדי שהטקסט יהיה קריא */
     [data-testid="stVerticalBlock"] {{
         background-color: rgba(255, 255, 255, 0.9);
         padding: 30px;
         border-radius: 20px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
     }}
-
-    html, body {{ 
-        direction: rtl; 
-        text-align: right; 
-    }}
+    
+    /* שאר ה-CSS שלך (RTL, כפתורים וכו') */
+    html, body {{ direction: rtl; text-align: right; }}
     </style>
     """, unsafe_allow_html=True)
 
