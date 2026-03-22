@@ -21,7 +21,7 @@ def get_image_base64(path):
         return None
 
 # טעינת סמל הגדוד
-logo_path = "assets/kedem.png" 
+logo_path = "kedem.png" 
 logo_base64 = get_image_base64(logo_path)
 
 # עיצוב CSS כולל לרמת האתר
