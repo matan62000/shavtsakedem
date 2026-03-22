@@ -71,7 +71,7 @@ st.markdown(f"""
     @import url('https://fonts.googleapis.com/css2?family=Assistant:wght@400;700&display=swap');
     
     [data-testid="stAppViewContainer"] {{
-        background-image: url("{BG_IMAGE_URL}");
+        background-image: url("{bg_path}");
         background-size: cover;
         background-position: center;
         background-attachment: fixed;
