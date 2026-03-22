@@ -3,76 +3,101 @@ import firebase_admin
 from firebase_admin import credentials, db
 import os
 
+# --- 1. פונקציית אתחול משופרת (מנקה זיכרון) ---
 def init_firebase():
+    # בדיקה אם כבר יש אפליקציה פעילה כדי לא ליצור כפילות
     if not firebase_admin._apps:
         try:
-            # הגדרת הנתיב לקובץ שהורדת ושמת בתיקייה
-            json_path = "service_account.json"
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            # וודא שהשם כאן תואם לשם הקובץ שיש לך בתיקייה (service_account.json או firebase_key.json)
+            json_path = os.path.join(current_dir, "service_account.json") 
             
             if os.path.exists(json_path):
-                # טעינה ישירה מהקובץ הפיזי - הדרך הכי בטוחה
                 cred = credentials.Certificate(json_path)
+                # אתחול כאפליקציית ברירת מחדל (בלי שם ייחודי, כדי למנוע את השגיאה החדשה)
+                firebase_admin.initialize_app(cred, {
+                    'databaseURL': "https://shavtsakedem-default-rtdb.europe-west1.firebasedatabase.app/"
+                })
             else:
-                # גיבוי: אם הקובץ לא נמצא, ננסה להשתמש ב-Secrets
-                s_acc = dict(st.secrets["firebase_service_account"])
-                if "private_key" in s_acc:
-                    s_acc["private_key"] = s_acc["private_key"].replace("\\n", "\n")
-                cred = credentials.Certificate(s_acc)
-
-            firebase_admin.initialize_app(cred, {
-                'databaseURL': "https://shavtsakedem-default-rtdb.europe-west1.firebasedatabase.app/"
-            })
+                st.error(f"❌ קובץ המפתח לא נמצא בנתיב: {json_path}")
+                st.stop()
         except Exception as e:
-            st.error(f"שגיאה בחיבור ל-Firebase: {e}")
+            st.error(f"❌ שגיאה באתחול: {e}")
             st.stop()
 
 init_firebase()
 
-# --- ממשק המנהל ---
-st.set_page_config(page_title="ניהול מערכת", layout="wide")
-st.title("⚙️ לוח ניהול צוותים")
+# --- 2. הגדרות דף ---
+st.set_page_config(page_title="ניהול מערכת שווים", layout="wide")
 
-# מנגנון סיסמה
-if "auth" not in st.session_state:
-    st.session_state.auth = False
+# --- 3. בדיקת סיסמה ---
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
 
-if not st.session_state.auth:
-    pwd = st.text_input("הכנס קוד מנהל:", type="password")
+if not st.session_state.authenticated:
+    st.title("🔐 כניסת מנהל")
+    pwd = st.text_input("הכנס סיסמת מנהל:", type="password")
     if st.button("כניסה"):
         if pwd == "Matan4261!":
-            st.session_state.auth = True
+            st.session_state.authenticated = True
             st.rerun()
         else:
-            st.error("קוד שגוי")
+            st.error("🚫 סיסמה שגויה")
     st.stop()
 
-# ניהול צוותים
+# --- 4. ממשק ניהול הצוותים ---
+st.title("⚙️ לוח ניהול צוותים")
+st.success("✅ החיבור ל-Firebase הצליח!")
+
+st.subheader("👥 צוותים רשומים במערכת")
 try:
-    ref = db.reference('teams')
-    data = ref.get()
-    if data:
-        items = data.items() if isinstance(data, dict) else enumerate(data)
+    # שליפת נתונים - כאן בדרך כלל קופצת שגיאת ה-Signature אם המפתח פגום
+    teams_ref = db.reference('teams')
+    teams = teams_ref.get()
+    
+    if teams:
+        if isinstance(teams, list):
+            items = [(i, t) for i, t in enumerate(teams) if t is not None]
+        else:
+            items = teams.items()
+
         for key, team in items:
-            if team:
-                with st.container(border=True):
-                    c1, c2 = st.columns([4,1])
-                    c1.write(f"**{team.get('name')}** (קוד: {team.get('code')})")
-                    if c2.button("מחק", key=f"del_{key}"):
+            with st.container(border=True):
+                col1, col2 = st.columns([5, 1])
+                with col1:
+                    st.write(f"🏷️ **שם:** {team.get('name')} | 🔑 **קוד:** {team.get('code')}")
+                with col2:
+                    if st.button("🗑️ מחק", key=f"del_{key}"):
                         db.reference(f'teams/{key}').delete()
+                        st.toast(f"צוות {team.get('name')} נמחק!")
                         st.rerun()
     else:
-        st.info("אין צוותים.")
+        st.info("אין צוותים רשומים כרגע.")
 except Exception as e:
-    st.error(f"שגיאה: {e}")
+    st.error(f"⚠️ שגיאה בשליפת נתונים: {e}")
+    if "invalid_grant" in str(e):
+        st.warning("🚨 השגיאה נמשכת? רוקן את הקובץ .streamlit/secrets.toml לגמרי ועשה ריסטרט ל-VS Code.")
 
-# הוספה
-with st.expander("➕ הוסף צוות"):
-    with st.form("add"):
-        n = st.text_input("שם")
-        c = st.text_input("קוד")
-        if st.form_submit_button("שמור"):
-            if n and c:
-                exist = db.reference('teams').get()
-                idx = len(exist) if exist else 0
-                db.reference(f'teams/{idx}').set({"id": idx, "name": n, "code": c})
+# --- 5. הוספת צוות חדש ---
+st.divider()
+with st.expander("➕ הוסף צוות חדש למערכת"):
+    with st.form("add_team_form", clear_on_submit=True):
+        new_name = st.text_input("שם הצוות")
+        new_code = st.text_input("קוד גישה")
+        submit = st.form_submit_button("שמור צוות ✅")
+        
+        if submit:
+            if new_name and new_code:
+                existing_teams = db.reference('teams').get()
+                new_index = len(existing_teams) if existing_teams else 0
+                
+                db.reference(f'teams/{new_index}').set({
+                    "id": new_index,
+                    "name": new_name,
+                    "code": str(new_code),
+                    "active": False,
+                    "lat": 32.0,
+                    "lon": 34.8
+                })
+                st.success(f"הצוות '{new_name}' נוסף בהצלחה!")
                 st.rerun()
