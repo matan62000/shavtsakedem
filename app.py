@@ -183,124 +183,102 @@ with col1:
 
 with col2:
     st.subheader("🌍 מפת כוחות בזמן אמת")
+    
+    # הגדרת זמן נוכחי לחישובים
+    israel_tz = pytz.timezone('Asia/Jerusalem')
+    now = datetime.now(israel_tz)
+    
+    # יצירת המפה
     m = folium.Map(location=[31.5, 34.8], zoom_start=8)
     has_active_teams = False
+    table_rows = [] # נכין כבר את הנתונים לטבלה כדי לחסוך לולאה נוספת
+
     for team in teams_data:
         if team.get('active') and 'lat' in team and 'lon' in team:
             has_active_teams = True
-            members_html = "<br>".join(team.get('members', [])) or "אין חברים רשומים"
-            popup_html = f"""
-            <div style="direction: rtl; text-align: right; font-family: sans-serif; min-width: 150px;">
-                <b style="color: #4CAF50;">צוות: {team.get('name')}</b><br>
-                <hr style="margin: 5px 0;">
-                <b>👥 חברים:</b><br>{members_html}<br>
-                <b>🔑 קוד:</b> {team.get('code')}
-            </div>
-            """
-            folium.Marker(
-                location=[team['lat'], team['lon']],
-                popup=folium.Popup(popup_html, max_width=300),
-                tooltip=team.get('name'),
-                icon=folium.Icon(color="red", icon="info-sign")
-            ).add_to(m)
-    
-    st_folium(m, width="100%", height=500)
-    if not has_active_teams:
-        st.info("ממתין לדיווחים מהשטח...")
-
-if st.button("🔄 רענן נתוני מפה"):
-    st.rerun()
-
-    # --- 6. טבלת בקרה וסיכום כוחות ---
-st.markdown("---")
-st.subheader("📊 סיכום סטטוס כוחות בשטח")
-
-if teams_data:
-    # הכנת רשימה לעיבוד בטבלה
-    table_rows = []
-    israel_tz = pytz.timezone('Asia/Jerusalem')
-    now = datetime.now(israel_tz)
-
-    for team in teams_data:
-        if team.get('active'):
-            # חישוב זמן דיווח אחרון (אם קיים ב-Firebase)
-            # הערה: כדאי להוסיף timestamp ב-update_team_in_db כדי שזה יהיה מדויק
-            last_seen = team.get('last_seen', 'אין נתון')
             
-            # עיצוב חיווי סטטוס
-            status_emoji = "🟢" # ברירת מחדל פעיל
-            
-            table_rows.append({
-                "סטטוס": status_emoji,
-                "שם הצוות": team.get('name'),
-                "קוד": team.get('code'),
-                "חברי צוות": ", ".join(team.get('members', [])),
-                "מיקום אחרון": f"{team.get('lat', 0):.4f}, {team.get('lon', 0):.4f}"
-            })
-
-# --- 6. טבלת בקרה וסיכום כוחות עם סטטוס דינמי ---
-st.markdown("---")
-st.subheader("📊 סיכום סטטוס כוחות בשטח")
-
-if teams_data:
-    table_rows = []
-    israel_tz = pytz.timezone('Asia/Jerusalem')
-    now = datetime.now(israel_tz)
-    
-    for team in teams_data:
-        if team.get('active'):
-            # 1. שליפת זמן דיווח אחרון וחישוב סטטוס
+            # 1. חישוב זמן וסטטוס (עבור המפה והטבלה)
             last_seen_str = team.get('last_seen', '')
-            status_emoji = "⚪" # ברירת מחדל
+            icon_color = "red" # ברירת מחדל
+            status_emoji = "🔴"
             
             try:
-                # הפיכת מחרוזת הזמן לאובייקט זמן להשוואה
                 last_time = datetime.strptime(last_seen_str, "%H:%M:%S").replace(
                     year=now.year, month=now.month, day=now.day
                 )
                 last_time = israel_tz.localize(last_time)
-                
-                # חישוב הפרש דקות
                 diff_minutes = (now - last_time).total_seconds() / 60
                 
                 if diff_minutes <= 15:
-                    status_emoji = "🟢" # פעיל (עד 15 דקות)
+                    icon_color = "green"
+                    status_emoji = "🟢"
                 elif diff_minutes <= 30:
-                    status_emoji = "🟡" # השהייה (15-30 דקות)
+                    icon_color = "orange"
+                    status_emoji = "🟡"
                 else:
-                    status_emoji = "🔴" # נתק/לא פעיל (מעל 30 דקות)
+                    icon_color = "red"
+                    status_emoji = "🔴"
             except:
-                status_emoji = "🔴"
+                pass
 
-            # 2. הוספת שורה לטבלה
+            # 2. הוספת סמן למפה עם הצבע המתאים
+            members_html = "<br>".join(team.get('members', [])) or "אין רשימה"
+            popup_html = f"""
+            <div style="direction: rtl; text-align: right; font-family: sans-serif; min-width: 150px;">
+                <b style="color: {icon_color};">צוות: {team.get('name')}</b><br>
+                <hr style="margin: 5px 0;">
+                <b>👥 חברים:</b><br>{members_html}<br>
+                <b>🕒 עדכון:</b> {last_seen_str}
+            </div>
+            """
+            
+            folium.Marker(
+                location=[team['lat'], team['lon']],
+                popup=folium.Popup(popup_html, max_width=300),
+                tooltip=team.get('name'),
+                icon=folium.Icon(color=icon_color, icon="info-sign")
+            ).add_to(m)
+
+            # 3. הכנת שורה לטבלה שמתחת למפה
             table_rows.append({
                 "סטטוס": status_emoji,
                 "שם הצוות": team.get('name'),
                 "קוד מפקד": team.get('code'),
-                "חברי צוות": ", ".join(team.get('members', [])) if team.get('members') else "אין רשימה",
+                "חברי צוות": members_html.replace("<br>", ", "),
                 "עדכון אחרון": last_seen_str,
                 "מיקום": f"{team.get('lat', 0):.4f}, {team.get('lon', 0):.4f}"
             })
-
-    if table_rows:
-        df = pd.DataFrame(table_rows)
-        
-        # תצוגת מדדים וכפתור הורדה בשורה אחת
-        m1, m2 = st.columns([1, 1])
-        m1.metric("סה\"כ צוותים פעילים", len(table_rows))
-        
-        # הכנת קובץ אקסל (CSV בקידוד עברית)
-        csv = df.to_csv(index=False, encoding='utf-16', sep='\t').encode('utf-16')
-        m2.download_button(
-            label='📥 הורד דו"ח מצב לאקסל',
-            data=csv,
-            file_name=f"report_{now.strftime('%d_%m_%H%M')}.csv",
-            mime='text/csv',
-        )
-        
-        # הצגת הטבלה
-        st.dataframe(df, use_container_width=True, hide_index=True)
-    else:
+    
+    # הצגת המפה
+    st_folium(m, width="100%", height=500)
+    
+    if not has_active_teams:
         st.info("ממתין לדיווחים מהשטח...")
+
+# כפתור רענון ידני
+if st.button("🔄 רענן נתונים עכשיו"):
+    st.rerun()
+
+# --- 6. טבלת בקרה וסיכום (מופיעה פעם אחת בסוף) ---
+st.markdown("---")
+st.subheader("📊 סיכום סטטוס כוחות בשטח")
+
+if table_rows:
+    df = pd.DataFrame(table_rows)
+    
+    # שורת מדדים וכפתור הורדה
+    m1, m2 = st.columns([1, 1])
+    m1.metric("סה\"כ צוותים פעילים", len(table_rows))
+    
+    csv = df.to_csv(index=False, encoding='utf-16', sep='\t').encode('utf-16')
+    m2.download_button(
+        label='📥 הורד דו"ח מצב לאקסל',
+        data=csv,
+        file_name=f"shavtsakedem_{now.strftime('%d_%m_%H%M')}.csv",
+        mime='text/csv',
+    )
+    
+    # הצגת הטבלה
+    st.dataframe(df, use_container_width=True, hide_index=True)
 else:
-    st.warning("לא נמצאו נתוני צוותים בבסיס הנתונים.")
+    st.warning("אין נתונים להצגה בטבלה.")
