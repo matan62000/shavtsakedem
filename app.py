@@ -11,6 +11,55 @@ from streamlit_autorefresh import st_autorefresh
 # --- 1. הגדרות דף ועיצוב RTL ---
 st.set_page_config(page_title="שבצ''קדם - ניהול בזמן אמת", layout="wide")
 
+def get_image_base64(path):
+    try:
+        with open(path, "rb") as image_file:
+            return base64.b64encode(image_file.read()).decode()
+    except FileNotFoundError:
+        return None # מחזיר None אם הקובץ לא נמצא
+
+# טעינת סמל הגדוד (תחליף את הנתיב לשם הקובץ שלך!)
+logo_path = "assets/logo.png" 
+logo_base64 = get_image_base64(logo_path)
+
+# בניית ה-HTML של הכותרת עם הסמל
+header_html = f"""
+<div style="direction: rtl; text-align: right; display: flex; align-items: center; justify-content: center; gap: 20px; padding: 10px; margin-bottom: 20px;">
+"""
+if logo_base64:
+    header_html += f'<img src="data:image/png;base64,{logo_base64}" width="80" alt="סמל הגדוד">'
+
+header_html += """
+    <h1 style='margin: 0; font-family: sans-serif; font-size: 2.5em;'>🛡️ שבצ''קדם - מערכת ניהול שבצ''קים</h1>
+</div>
+"""
+
+# הזרקת ה-CSS המעודכן (RTL ועיצוב כפתורים)
+st.markdown("""
+    <style>
+    .main { direction: rtl; text-align: right; font-family: sans-serif; }
+    div.stButton > button { 
+        width: 100%; 
+        border-radius: 10px; 
+        height: 3em; 
+        font-weight: bold; 
+        background-color: #4CAF50; /* ירוק */
+        color: white;
+        border: none;
+    }
+    div.stButton > button:hover {
+        background-color: #45a049; /* ירוק כהה יותר בריחוף */
+    }
+    /* הסרת תפריטים מובנים של Streamlit למראה נקי */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    </style>
+    """, unsafe_allow_html=True)
+
+# הצגת הכותרת עם הסמל
+st.markdown(header_html, unsafe_allow_html=True)
+
 st.markdown("""
     <style>
     .main { direction: rtl; text-align: right; }
