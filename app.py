@@ -6,7 +6,7 @@ from streamlit_js_eval import get_geolocation
 import firebase_admin
 from firebase_admin import credentials, db
 import os
-import base64  # הוספתי את ה-import החסר
+import base64
 from streamlit_autorefresh import st_autorefresh
 
 # --- 1. הגדרות דף ---
@@ -22,20 +22,16 @@ def get_image_base64(path):
     except Exception:
         return None
 
-# הגדרת נתיבים
+# הגדרת נתיבים ולינקים (תחליף ללינקים שלך בגיטהאב)
 logo_path = "kedem.png"
 logo_base64 = get_image_base64(logo_path)
+BG_IMAGE_URL = "kedem1.png"
 
-# לינק לתמונת רקע מ-GitHub (וודא שהשם והמשתמש נכונים)
-# אם אין לך עדיין לינק, שמתי כאן לינק גנרי של רקע צבאי/טקסטורה שחורה
-BG_IMAGE_URL = "https://raw.githubusercontent.com/YOUR_USER/YOUR_REPO/main/background.jpg"
-
-# --- 2. הזרקת עיצוב (CSS) כולל רקע ושקיפות ---
+# --- 2. הזרקת עיצוב (CSS) ---
 st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Assistant:wght@400;700&display=swap');
     
-    /* הגדרת רקע לכל האתר */
     [data-testid="stAppViewContainer"] {{
         background-image: url("{BG_IMAGE_URL}");
         background-size: cover;
@@ -43,12 +39,10 @@ st.markdown(f"""
         background-attachment: fixed;
     }}
 
-    /* יצירת שכבה חצי שקופה מעל הרקע כדי שהתוכן יהיה קריא */
     [data-testid="stVerticalBlock"] {{
-        background-color: rgba(255, 255, 255, 0.9); /* לבן עם 90% שקיפות */
+        background-color: rgba(255, 255, 255, 0.9);
         padding: 25px;
         border-radius: 15px;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
     }}
 
     html, body, [data-testid="stSidebar"] {{
@@ -57,22 +51,14 @@ st.markdown(f"""
         font-family: 'Assistant', sans-serif;
     }}
     
-    .main {{ direction: rtl; text-align: right; }}
-    
-    /* עיצוב כפתורים */
     div.stButton > button {{ 
         width: 100%; 
         border-radius: 10px; 
         height: 3em; 
         font-weight: bold; 
-        background-color: #2e5a27; /* ירוק זית */
+        background-color: #2e5a27;
         color: white;
         border: none;
-        transition: 0.3s;
-    }}
-    div.stButton > button:hover {{
-        background-color: #45a049;
-        box-shadow: 0 4px 8px rgba(0,0,0,0.3);
     }}
     
     #MainMenu {{visibility: hidden;}}
@@ -95,7 +81,31 @@ st.markdown(f"""
     <hr>
     """, unsafe_allow_html=True)
 
-init_firebase()
+# --- 4. הגדרת פונקציית Firebase (חייבת לבוא לפני הקריאה לה!) ---
+def init_firebase():
+    if not firebase_admin._apps:
+        try:
+            if "firebase_service_account" not in st.secrets:
+                st.error("❌ לא נמצאו הגדרות Firebase ב-Secrets")
+                st.stop()
+
+            secret_info = dict(st.secrets["firebase_service_account"])
+            if "private_key" in secret_info:
+                pk = secret_info["private_key"]
+                pk = pk.replace("\\n", "\n").strip().strip('"')
+                secret_info["private_key"] = pk
+
+            cred = credentials.Certificate(secret_info)
+            firebase_admin.initialize_app(cred, {
+                'databaseURL': "https://shavtsakedem-default-rtdb.europe-west1.firebasedatabase.app/"
+            })
+        except Exception as e:
+            st.error(f"שגיאה בחיבור ל-Firebase: {e}")
+            st.stop()
+
+# --- 5. הפעלת הפונקציות ---
+st_autorefresh(interval=30000, limit=None, key="fscounter")
+init_firebase() # עכשיו זה יעבוד כי הפונקציה הוגדרה שורה אחת מעל
 
 # --- 3. פונקציות נתונים ---
 def get_teams_from_db():
