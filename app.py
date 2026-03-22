@@ -260,7 +260,7 @@ if teams_data:
                 "קו רוחב (Lat)": team.get('lat', 0),
                 "קו אורך (Lon)": team.get('lon', 0)
             })
-            
+
     if table_rows:
         df = pd.DataFrame(table_rows)
         
@@ -269,11 +269,10 @@ if teams_data:
         m1.metric("סה\"כ צוותים פעילים", len(table_rows))
         
         # יצירת קובץ ה-CSV לייצוא
-        # שימוש ב-encoding='utf-16' ו-sep='\t' מבטיח שהעברית תיפתח היטב באקסל
         csv = df.to_csv(index=False, encoding='utf-16', sep='\t').encode('utf-16')
         
         m2.download_button(
-            label="📥 הורד דו"ח מצב לאקסל (Excel)",
+            label='📥 הורד דו"ח מצב לאקסל (Excel)', # שימוש במרכאות בודדות מסביב פותר את השגיאה
             data=csv,
             file_name=f"shavtsakedem_report_{datetime.now().strftime('%d_%m_%Y_%H%M')}.csv",
             mime='text/csv',
