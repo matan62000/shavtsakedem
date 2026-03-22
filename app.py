@@ -20,18 +20,28 @@ st.markdown("""
 st.markdown("<h1 style='text-align: center;'>🛡️ שבצ''קדם - מערכת ניהול שבצ''קים בזמן אמת</h1>", unsafe_allow_html=True)
 
 # --- 2. חיבור ל-Firebase באמצעות הקובץ ---
-if not firebase_admin._apps:
-    # נתיב לקובץ שנמצא באותה תיקייה של הקוד
-    json_path = "service_account.json"
-    
-    if os.path.exists(json_path):
-        cred = credentials.Certificate(json_path)
-        firebase_admin.initialize_app(cred, {
-            'databaseURL': "https://shavtsakedem-default-rtdb.europe-west1.firebasedatabase.app/"
-        })
-    else:
-        st.error(f"קובץ המפתח {json_path} לא נמצא בתיקייה!")
-        st.stop()
+def init_firebase():
+    if not firebase_admin._apps:
+        try:
+            # שליפת המידע מה-Secrets
+            secret_info = dict(st.secrets["firebase_service_account"])
+            
+            # טיפול יסודי במפתח הפרטי
+            if "private_key" in secret_info:
+                pk = secret_info["private_key"]
+                # מחליף ירידות שורה כתובות (\n) בירידות שורה אמיתיות
+                pk = pk.replace("\\n", "\n")
+                # מסיר גרשיים מיותרים ורווחים שאולי השתרבבו
+                pk = pk.strip().strip('"')
+                secret_info["private_key"] = pk
+
+            cred = credentials.Certificate(secret_info)
+            firebase_admin.initialize_app(cred, {
+                'databaseURL': "https://shavtsakedem-default-rtdb.europe-west1.firebasedatabase.app/"
+            })
+        except Exception as e:
+            st.error(f"שגיאה בחיבור ל-Firebase: {e}")
+            st.stop()
 
 # --- 3. פונקציות נתונים ---
 def get_teams_from_db():
