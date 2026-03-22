@@ -102,8 +102,16 @@ def update_team_in_db(team_id, lat, lon):
     try:
         israel_tz = pytz.timezone('Asia/Jerusalem')
         current_time = datetime.now(israel_tz).strftime("%H:%M:%S")
-        db.reference(f'teams/{team_id}').update({
+        ref = db.reference(f'teams/{team_id}')
+        
+        # עדכון מיקום נוכחי
+        ref.update({
             'lat': lat, 'lon': lon, 'active': True, 'last_seen': current_time
+        })
+        
+        # הוספה להיסטוריה (פירורי לחם)
+        ref.child('history').push({
+            'lat': lat, 'lon': lon, 'time': current_time
         })
         return True
     except: return False
@@ -128,7 +136,6 @@ with col1:
         
         if auto_up and loc and 'coords' in loc:
             lat, lon = loc['coords']['latitude'], loc['coords']['longitude']
-            # מניעת רענון מיותר אם לא זז
             if abs(st.session_state.get('last_lat_sent', 0) - lat) > 0.0001:
                 if update_team_in_db(team_id, lat, lon):
                     st.session_state.last_lat_sent = lat
@@ -160,12 +167,24 @@ with col2:
                 elif diff <= 30: icon_color, status_emoji = "orange", "🟡"
             except: pass
 
+            # --- ציור נתיב פירורי לחם (התוספת החדשה) ---
+            if 'history' in team and team['history']:
+                history = team['history']
+                # הפיכת המילון של Firebase לרשימת קואורדינטות
+                path_points = [[p['lat'], p['lon']] for p in history.values()] if isinstance(history, dict) else []
+                if len(path_points) > 1:
+                    folium.PolyLine(path_points, color=icon_color, weight=3, opacity=0.7, dash_array='5, 10').add_to(m)
+
             members = ", ".join(team.get('members', [])) if team.get('members') else "אין רשימה"
+            
+            # שימוש באייקון של רץ אם הוא פעיל
+            icon_type = "running" if icon_color == "green" else "info-sign"
+            
             folium.Marker(
                 [team['lat'], team['lon']],
                 popup=f"<b>צוות: {team.get('name')}</b><br>חברים: {members}<br>עדכון: {last_seen_str}",
                 tooltip=team.get('name'),
-                icon=folium.Icon(color=icon_color, icon="info-sign")
+                icon=folium.Icon(color=icon_color, icon=icon_type, prefix="fa" if icon_type == "running" else "glyphicon")
             ).add_to(m)
 
             table_rows.append({
