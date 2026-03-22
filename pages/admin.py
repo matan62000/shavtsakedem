@@ -5,25 +5,20 @@ import os
 
 # --- 1. פונקציית אתחול משופרת (מנקה זיכרון) ---
 def init_firebase():
-    # בדיקה אם כבר יש אפליקציה פעילה כדי לא ליצור כפילות
     if not firebase_admin._apps:
         try:
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            # וודא שהשם כאן תואם לשם הקובץ שיש לך בתיקייה (service_account.json או firebase_key.json)
-            json_path = os.path.join(current_dir, "service_account.json") 
-            
-            if os.path.exists(json_path):
-                cred = credentials.Certificate(json_path)
-                # אתחול כאפליקציית ברירת מחדל (בלי שם ייחודי, כדי למנוע את השגיאה החדשה)
+            # בדיקה אם אנחנו מריצים מקומית עם Secrets או בענן
+            if "firebase" in st.secrets:
+                creds_dict = dict(st.secrets["firebase"])
+                cred = credentials.Certificate(creds_dict)
                 firebase_admin.initialize_app(cred, {
                     'databaseURL': "https://shavtsakedem-default-rtdb.europe-west1.firebasedatabase.app/"
                 })
             else:
-                st.error(f"❌ קובץ המפתח לא נמצא בנתיב: {json_path}")
+                st.error("❌ לא נמצאו הגדרות Firebase ב-Secrets!")
                 st.stop()
         except Exception as e:
             st.error(f"❌ שגיאה באתחול: {e}")
-            st.stop()
 
 init_firebase()
 
