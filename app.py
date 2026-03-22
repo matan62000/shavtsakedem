@@ -15,17 +15,26 @@ st.set_page_config(page_title="שבצ''קדם - ניהול בזמן אמת", lay
 # --- 1. הגדרות דף ועיצוב ---
 st.set_page_config(page_title="שבצ''קדם - ניהול בזמן אמת", layout="wide")
 
-# פונקציה לטעינת תמונה (נשארת אותו דבר)
+# פונקציה משופרת לטעינת תמונה
 def get_image_base64(path):
+    if not os.path.exists(path):
+        # הדפסה ללוגים של Streamlit כדי שתוכל לראות מה חסר
+        print(f"DEBUG: File not found at {path}")
+        return None
     try:
         with open(path, "rb") as image_file:
             return base64.b64encode(image_file.read()).decode()
-    except Exception:
+    except Exception as e:
+        print(f"DEBUG: Error loading image: {e}")
         return None
 
-# עדכון הנתיב לקובץ החדש בתיקייה הראשית
+# וודא שהשם כאן תואם ב-100% לשם הקובץ ב-GitHub
 logo_path = "kedem.png" 
 logo_base64 = get_image_base64(logo_path)
+
+# בדיקה אם הלוגו נטען - אם לא, נציג הודעת דיבאג קטנה (רק למנהל)
+if not logo_base64:
+    st.sidebar.warning(f"קובץ לוגו '{logo_path}' לא נמצא בשרת")
 
 # עיצוב CSS כולל לרמת האתר
 st.markdown("""
