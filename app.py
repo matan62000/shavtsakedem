@@ -6,84 +6,83 @@ from streamlit_js_eval import get_geolocation
 import firebase_admin
 from firebase_admin import credentials, db
 import os
+import base64  # הוספתי את ה-import החסר
 from streamlit_autorefresh import st_autorefresh
 
 # --- 1. הגדרות דף ועיצוב RTL ---
 st.set_page_config(page_title="שבצ''קדם - ניהול בזמן אמת", layout="wide")
 
+# פונקציה לטעינת תמונה
 def get_image_base64(path):
     try:
         with open(path, "rb") as image_file:
             return base64.b64encode(image_file.read()).decode()
-    except FileNotFoundError:
-        return None # מחזיר None אם הקובץ לא נמצא
+    except Exception:
+        return None
 
-# טעינת סמל הגדוד (תחליף את הנתיב לשם הקובץ שלך!)
+# טעינת סמל הגדוד
 logo_path = "assets/logo.png" 
 logo_base64 = get_image_base64(logo_path)
 
-# בניית ה-HTML של הכותרת עם הסמל
-header_html = f"""
-<div style="direction: rtl; text-align: right; display: flex; align-items: center; justify-content: center; gap: 20px; padding: 10px; margin-bottom: 20px;">
-"""
-if logo_base64:
-    header_html += f'<img src="data:image/png;base64,{logo_base64}" width="80" alt="סמל הגדוד">'
-
-header_html += """
-    <h1 style='margin: 0; font-family: sans-serif; font-size: 2.5em;'>🛡️ שבצ''קדם - מערכת ניהול שבצ''קים</h1>
-</div>
-"""
-
-# הזרקת ה-CSS המעודכן (RTL ועיצוב כפתורים)
+# עיצוב CSS כולל לרמת האתר
 st.markdown("""
     <style>
-    .main { direction: rtl; text-align: right; font-family: sans-serif; }
+    @import url('https://fonts.googleapis.com/css2?family=Assistant:wght@400;700&display=swap');
+    
+    html, body, [data-testid="stSidebar"] {
+        direction: rtl;
+        text-align: right;
+        font-family: 'Assistant', sans-serif;
+    }
+    
+    .main { direction: rtl; text-align: right; }
+    
+    /* עיצוב כפתורים */
     div.stButton > button { 
         width: 100%; 
         border-radius: 10px; 
         height: 3em; 
         font-weight: bold; 
-        background-color: #4CAF50; /* ירוק */
+        background-color: #4CAF50; 
         color: white;
         border: none;
+        transition: 0.3s;
     }
     div.stButton > button:hover {
-        background-color: #45a049; /* ירוק כהה יותר בריחוף */
+        background-color: #45a049;
+        border: 1px solid white;
     }
-    /* הסרת תפריטים מובנים של Streamlit למראה נקי */
+    
+    /* ניקוי ממשק */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
     </style>
     """, unsafe_allow_html=True)
 
-# הצגת הכותרת עם הסמל
-st.markdown(header_html, unsafe_allow_html=True)
+# בניית הכותרת עם הלוגו (HTML מרוכז)
+if logo_base64:
+    logo_html = f'<img src="data:image/png;base64,{logo_base64}" width="100">'
+else:
+    logo_html = '<div style="font-size: 50px;">🛡️</div>'
 
-st.markdown("""
-    <style>
-    .main { direction: rtl; text-align: right; }
-    div.stButton > button { width: 100%; border-radius: 10px; height: 3em; font-weight: bold; }
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    </style>
+st.markdown(f"""
+    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px;">
+        {logo_html}
+        <h1 style="margin-top: 10px; text-align: center;">מערכת שבצ''קדם - ניהול כוחות בזמן אמת</h1>
+    </div>
+    <hr>
     """, unsafe_allow_html=True)
-
-st.markdown("<h1 style='text-align: center;'>🛡️ שבצ''קדם - מערכת ניהול שבצ''קים בזמן אמת</h1>", unsafe_allow_html=True)
 
 # --- 2. חיבור ל-Firebase ---
 def init_firebase():
     if not firebase_admin._apps:
         try:
-            # בדיקה אם ה-Secrets קיימים
             if "firebase_service_account" not in st.secrets:
-                st.error("❌ לא נמצאו הגדרות Firebase ב-Secrets של המערכת")
+                st.error("❌ לא נמצאו הגדרות Firebase ב-Secrets")
                 st.stop()
 
-            # שליפת המידע מה-Secrets
             secret_info = dict(st.secrets["firebase_service_account"])
-            
-            # טיפול יסודי במפתח הפרטי (המרת \n לירידות שורה אמיתיות)
             if "private_key" in secret_info:
                 pk = secret_info["private_key"]
                 pk = pk.replace("\\n", "\n").strip().strip('"')
@@ -97,9 +96,9 @@ def init_firebase():
             st.error(f"שגיאה בחיבור ל-Firebase: {e}")
             st.stop()
 
-count = st_autorefresh(interval=30000, limit=None, key="fscounter")
+# רענון אוטומטי כל 30 שניות
+st_autorefresh(interval=30000, limit=None, key="fscounter")
 
-# הפעלת האתחול
 init_firebase()
 
 # --- 3. פונקציות נתונים ---
@@ -108,31 +107,25 @@ def get_teams_from_db():
         ref = db.reference('teams')
         teams = ref.get()
         if not teams: return []
-        # הפיכת הנתונים לרשימה נקייה (מטפל גם במילון וגם ברשימה עם None)
         if isinstance(teams, dict):
             return [v for v in teams.values() if v is not None]
         return [t for t in teams if t is not None]
     except Exception as e:
-        st.sidebar.error(f"שגיאה בשליפת נתונים: {e}")
         return []
 
 def update_team_in_db(team_id, lat, lon):
     try:
-        # עדכון המיקום והגדרת הצוות כפעיל
         db.reference(f'teams/{team_id}').update({
             'lat': lat,
             'lon': lon,
             'active': True
         })
         return True
-    except Exception as e:
-        st.error(f"שגיאה בעדכון מסד הנתונים: {e}")
+    except Exception:
         return False
 
 # --- 4. לוגיקה עסקית ותצוגה ---
 teams_data = get_teams_from_db()
-
-# קריאת מיקום בזמן אמת מהדפדפן
 loc = get_geolocation()
 
 col1, col2 = st.columns([1, 2])
@@ -141,7 +134,6 @@ with col1:
     st.subheader("📲 דיווח מפקדים")
     user_code = st.text_input("הכנס קוד מפקד:", type="password")
     
-    # חיפוש הצוות לפי הקוד שהוזן
     found_team = next((t for t in teams_data if str(t.get('code')) == user_code), None)
     
     if found_team:
@@ -156,48 +148,42 @@ with col1:
                     st.toast("✅ המיקום עודכן בהצלחה!", icon="🚀")
                     st.rerun()
             else:
-                st.error("⚠️ לא ניתן לקבל מיקום. נא לאשר גישת GPS בדפדפן ולנסות שוב.")
+                st.error("⚠️ נא לאשר גישת GPS בדפדפן.")
     elif user_code != "":
-        st.error("❌ קוד שגוי או צוות לא קיים")
+        st.error("❌ קוד שגוי")
 
 with col2:
     st.subheader("🌍 מפת כוחות בזמן אמת")
     
-    # הגדרת מרכז המפה (לפי המיקום המדווח הראשון או מרכז הארץ)
-    center_lat, center_lon = 31.5, 34.8
-    m = folium.Map(location=[center_lat, center_lon], zoom_start=8, control_scale=True)
+    m = folium.Map(location=[31.5, 34.8], zoom_start=8, control_scale=True)
     
-    # הוספת סמנים לכל הצוותים הפעילים
     has_active_teams = False
     for team in teams_data:
         if team.get('active') and 'lat' in team and 'lon' in team:
-            # 1. הכנת רשימת חברי הצוות כטקסט
+            has_active_teams = True
             members = team.get('members', [])
-            members_text = ", ".join(members) if members else "אין חברים רשומים"
+            members_html = "<br>".join(members) if members else "אין חברים רשומים"
             
-            # 2. בניית תוכן ה-Popup (מה שיופיע כשלוחצים)
-            # אפשר להשתמש ב-HTML בסיסי לעיצוב
             popup_html = f"""
-            <div style="direction: rtl; text-align: right; font-family: sans-serif;">
-                <b>צוות:</b> {team.get('name')}<br>
-                <b>חברי צוות:</b> {members_text}<br>
-                <b>קוד:</b> {team.get('code')}
+            <div style="direction: rtl; text-align: right; font-family: sans-serif; min-width: 150px;">
+                <b style="color: #4CAF50;">צוות: {team.get('name')}</b><br>
+                <hr style="margin: 5px 0;">
+                <b>👥 חברים:</b><br>{members_html}<br>
+                <b>🔑 קוד:</b> {team.get('code')}
             </div>
             """
             
             folium.Marker(
                 location=[team['lat'], team['lon']],
-                popup=folium.Popup(popup_html, max_width=300), # הצגת הפרטים בלחיצה
-                tooltip=team.get('name'), # הצגת השם בריחוף עכבר
+                popup=folium.Popup(popup_html, max_width=300),
+                tooltip=team.get('name'),
                 icon=folium.Icon(color="red", icon="info-sign")
             ).add_to(m)
     
-    # הצגת המפה
     st_folium(m, width="100%", height=500)
     
     if not has_active_teams:
-        st.info("ממתין לדיווחים מהשטח... כרגע אין צוותים פעילים על המפה.")
+        st.info("ממתין לדיווחים מהשטח...")
 
-# כפתור רענון ידני בתחתית
 if st.button("🔄 רענן נתוני מפה"):
     st.rerun()
