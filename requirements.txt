@@ -1,7 +1,7 @@
 streamlit
-firebase-admin
-streamlit-js-eval
 pandas
 folium
 streamlit-folium
-pip install streamlit-js-eval
+streamlit-js-eval
+streamlit-autorefresh
+firebase-admin
