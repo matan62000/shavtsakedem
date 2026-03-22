@@ -12,7 +12,10 @@ from streamlit_autorefresh import st_autorefresh
 # --- 1. הגדרות דף ועיצוב RTL ---
 st.set_page_config(page_title="שבצ''קדם - ניהול בזמן אמת", layout="wide")
 
-# פונקציה לטעינת תמונה
+# --- 1. הגדרות דף ועיצוב ---
+st.set_page_config(page_title="שבצ''קדם - ניהול בזמן אמת", layout="wide")
+
+# פונקציה לטעינת תמונה (נשארת אותו דבר)
 def get_image_base64(path):
     try:
         with open(path, "rb") as image_file:
@@ -20,7 +23,7 @@ def get_image_base64(path):
     except Exception:
         return None
 
-# טעינת סמל הגדוד
+# עדכון הנתיב לקובץ החדש בתיקייה הראשית
 logo_path = "kedem.png" 
 logo_base64 = get_image_base64(logo_path)
 
