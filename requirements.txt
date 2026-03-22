@@ -4,3 +4,4 @@ streamlit-js-eval
 pandas
 folium
 streamlit-folium
+pip install streamlit-js-eval
