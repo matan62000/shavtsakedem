@@ -25,7 +25,45 @@ def get_image_base64(path):
 # הגדרת נתיבים ולינקים (תחליף ללינקים שלך בגיטהאב)
 logo_path = "kedem.png"
 logo_base64 = get_image_base64(logo_path)
-BG_IMAGE_URL = "kedem1.png"
+bg_path = "kedem1.png"
+
+bg_base64 = get_image_base64(bg_path)
+
+if bg_base64:
+    # אם התמונה נמצאה, נשתמש בה כרקע
+    bg_style = f"""
+    [data-testid="stAppViewContainer"] {{
+        background-image: url("data:image/jpg;base64,{bg_base64}");
+        background-size: cover;
+        background-position: center;
+        background-attachment: fixed;
+    }}
+    """
+else:
+    # אם לא נמצאה, נשים צבע רקע צבאי כהה כדי שלא יהיה לבן משעמם
+    bg_style = """
+    [data-testid="stAppViewContainer"] {
+        background-color: #1e2b1e; 
+    }
+    """
+
+st.markdown(f"""
+    <style>
+    {bg_style}
+
+    /* שכבת תוכן שקופה לקריאות */
+    [data-testid="stVerticalBlock"] {{
+        background-color: rgba(255, 255, 255, 0.9);
+        padding: 30px;
+        border-radius: 20px;
+    }}
+
+    html, body {{ 
+        direction: rtl; 
+        text-align: right; 
+    }}
+    </style>
+    """, unsafe_allow_html=True)
 
 # --- 2. הזרקת עיצוב (CSS) ---
 st.markdown(f"""
