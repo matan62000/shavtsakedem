@@ -24,7 +24,7 @@ def get_image_base64(path):
 
 # טעינת התמונות מהתיקייה הראשית
 logo_path = "kedem.png"
-bg_path = "kedem1.png"
+bg_path = "kedem1.jpeg"
 
 logo_base64 = get_image_base64(logo_path)
 bg_base64 = get_image_base64(bg_path)
