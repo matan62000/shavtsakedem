@@ -9,72 +9,81 @@ import os
 import base64  # הוספתי את ה-import החסר
 from streamlit_autorefresh import st_autorefresh
 
-# --- 1. הגדרות דף ועיצוב RTL ---
+# --- 1. הגדרות דף ---
 st.set_page_config(page_title="שבצ''קדם - ניהול בזמן אמת", layout="wide")
 
-# --- 1. הגדרות דף ועיצוב ---
-st.set_page_config(page_title="שבצ''קדם - ניהול בזמן אמת", layout="wide")
-
-# פונקציה משופרת לטעינת תמונה
+# פונקציה לטעינת תמונה (לוגו)
 def get_image_base64(path):
     if not os.path.exists(path):
-        # הדפסה ללוגים של Streamlit כדי שתוכל לראות מה חסר
-        print(f"DEBUG: File not found at {path}")
         return None
     try:
         with open(path, "rb") as image_file:
             return base64.b64encode(image_file.read()).decode()
-    except Exception as e:
-        print(f"DEBUG: Error loading image: {e}")
+    except Exception:
         return None
 
-# וודא שהשם כאן תואם ב-100% לשם הקובץ ב-GitHub
-logo_path = "kedem.png" 
+# הגדרת נתיבים
+logo_path = "kedem.png"
 logo_base64 = get_image_base64(logo_path)
 
-# בדיקה אם הלוגו נטען - אם לא, נציג הודעת דיבאג קטנה (רק למנהל)
-if not logo_base64:
-    st.sidebar.warning(f"קובץ לוגו '{logo_path}' לא נמצא בשרת")
+# לינק לתמונת רקע מ-GitHub (וודא שהשם והמשתמש נכונים)
+# אם אין לך עדיין לינק, שמתי כאן לינק גנרי של רקע צבאי/טקסטורה שחורה
+BG_IMAGE_URL = "https://raw.githubusercontent.com/YOUR_USER/YOUR_REPO/main/background.jpg"
 
-# עיצוב CSS כולל לרמת האתר
-st.markdown("""
+# --- 2. הזרקת עיצוב (CSS) כולל רקע ושקיפות ---
+st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Assistant:wght@400;700&display=swap');
     
-    html, body, [data-testid="stSidebar"] {
+    /* הגדרת רקע לכל האתר */
+    [data-testid="stAppViewContainer"] {{
+        background-image: url("{BG_IMAGE_URL}");
+        background-size: cover;
+        background-position: center;
+        background-attachment: fixed;
+    }}
+
+    /* יצירת שכבה חצי שקופה מעל הרקע כדי שהתוכן יהיה קריא */
+    [data-testid="stVerticalBlock"] {{
+        background-color: rgba(255, 255, 255, 0.9); /* לבן עם 90% שקיפות */
+        padding: 25px;
+        border-radius: 15px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    }}
+
+    html, body, [data-testid="stSidebar"] {{
         direction: rtl;
         text-align: right;
         font-family: 'Assistant', sans-serif;
-    }
+    }}
     
-    .main { direction: rtl; text-align: right; }
+    .main {{ direction: rtl; text-align: right; }}
     
     /* עיצוב כפתורים */
-    div.stButton > button { 
+    div.stButton > button {{ 
         width: 100%; 
         border-radius: 10px; 
         height: 3em; 
         font-weight: bold; 
-        background-color: #4CAF50; 
+        background-color: #2e5a27; /* ירוק זית */
         color: white;
         border: none;
         transition: 0.3s;
-    }
-    div.stButton > button:hover {
+    }}
+    div.stButton > button:hover {{
         background-color: #45a049;
-        border: 1px solid white;
-    }
+        box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+    }}
     
-    /* ניקוי ממשק */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
+    #MainMenu {{visibility: hidden;}}
+    footer {{visibility: hidden;}}
+    header {{visibility: hidden;}}
     </style>
     """, unsafe_allow_html=True)
 
-# בניית הכותרת עם הלוגו (HTML מרוכז)
+# --- 3. בניית הכותרת ---
 if logo_base64:
-    logo_html = f'<img src="data:image/png;base64,{logo_base64}" width="100">'
+    logo_html = f'<img src="data:image/png;base64,{logo_base64}" width="120">'
 else:
     logo_html = '<div style="font-size: 50px;">🛡️</div>'
 
@@ -85,31 +94,6 @@ st.markdown(f"""
     </div>
     <hr>
     """, unsafe_allow_html=True)
-
-# --- 2. חיבור ל-Firebase ---
-def init_firebase():
-    if not firebase_admin._apps:
-        try:
-            if "firebase_service_account" not in st.secrets:
-                st.error("❌ לא נמצאו הגדרות Firebase ב-Secrets")
-                st.stop()
-
-            secret_info = dict(st.secrets["firebase_service_account"])
-            if "private_key" in secret_info:
-                pk = secret_info["private_key"]
-                pk = pk.replace("\\n", "\n").strip().strip('"')
-                secret_info["private_key"] = pk
-
-            cred = credentials.Certificate(secret_info)
-            firebase_admin.initialize_app(cred, {
-                'databaseURL': "https://shavtsakedem-default-rtdb.europe-west1.firebasedatabase.app/"
-            })
-        except Exception as e:
-            st.error(f"שגיאה בחיבור ל-Firebase: {e}")
-            st.stop()
-
-# רענון אוטומטי כל 30 שניות
-st_autorefresh(interval=30000, limit=None, key="fscounter")
 
 init_firebase()
 
