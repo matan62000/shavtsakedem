@@ -88,26 +88,25 @@ except Exception as e:
     if "invalid_grant" in str(e):
         st.warning("🚨 השגיאה נמשכת? רוקן את הקובץ .streamlit/secrets.toml לגמרי ועשה ריסטרט ל-VS Code.")
 
-# --- 5. הוספת צוות חדש ---
-st.divider()
-with st.expander("➕ הוסף צוות חדש למערכת"):
-    with st.form("add_team_form", clear_on_submit=True):
-        new_name = st.text_input("שם הצוות")
-        new_code = st.text_input("קוד גישה")
-        submit = st.form_submit_button("שמור צוות ✅")
-        
-        if submit:
-            if new_name and new_code:
-                existing_teams = db.reference('teams').get()
-                new_index = len(existing_teams) if existing_teams else 0
-                
-                db.reference(f'teams/{new_index}').set({
-                    "id": new_index,
-                    "name": new_name,
-                    "code": str(new_code),
-                    "active": False,
-                    "lat": 32.0,
-                    "lon": 34.8
-                })
-                st.success(f"הצוות '{new_name}' נוסף בהצלחה!")
-                st.rerun()
+# --- בתוך ממשק הוספת/עריכת צוות ---
+with st.expander("➕ הוספת צוות חדש"):
+    new_team_name = st.text_input("שם הצוות:")
+    new_team_code = st.text_input("קוד כניסה (מספרים):")
+    # שדה חדש לחברי הצוות
+    team_members_input = st.text_area("חברי הצוות (הפרד שמות בפסיק):", placeholder="ישראל ישראלי, משה כהן...")
+
+    if st.button("צור צוות"):
+        if new_team_name and new_team_code:
+            # הפיכת הטקסט לרשימה של שמות נקיים מרווחים
+            members_list = [m.strip() for m in team_members_input.split(",") if m.strip()]
+            
+            new_id = str(len(get_teams_from_db()) + 1)
+            db.reference(f'teams/{new_id}').set({
+                'id': new_id,
+                'name': new_team_name,
+                'code': new_team_code,
+                'members': members_list, # שמירת הרשימה ב-Firebase
+                'active': False
+            })
+            st.success(f"צוות {new_team_name} נוצר!")
+            st.rerun()
