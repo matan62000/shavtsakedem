@@ -8,6 +8,8 @@ from firebase_admin import credentials, db
 import os
 import base64
 from streamlit_autorefresh import st_autorefresh
+from datetime import datetime, timedelta
+import pytz # לטיפול בשעון ישראל
 
 # --- 1. הגדרות דף ---
 st.set_page_config(page_title="שבצ''קדם - ניהול בזמן אמת", layout="wide")
@@ -141,11 +143,18 @@ def get_teams_from_db():
 
 def update_team_in_db(team_id, lat, lon):
     try:
+        israel_tz = pytz.timezone('Asia/Jerusalem')
+        current_time = datetime.now(israel_tz).strftime("%H:%M:%S")
+        
         db.reference(f'teams/{team_id}').update({
-            'lat': lat, 'lon': lon, 'active': True
+            'lat': lat,
+            'lon': lon,
+            'active': True,
+            'last_seen': current_time # הוספנו שעת דיווח
         })
         return True
-    except Exception: return False
+    except Exception:
+        return False
 
 # --- 5. תצוגה ---
 teams_data = get_teams_from_db()
@@ -201,3 +210,42 @@ with col2:
 
 if st.button("🔄 רענן נתוני מפה"):
     st.rerun()
+
+    # --- 6. טבלת בקרה וסיכום כוחות ---
+st.markdown("---")
+st.subheader("📊 סיכום סטטוס כוחות בשטח")
+
+if teams_data:
+    # הכנת רשימה לעיבוד בטבלה
+    table_rows = []
+    israel_tz = pytz.timezone('Asia/Jerusalem')
+    now = datetime.now(israel_tz)
+
+    for team in teams_data:
+        if team.get('active'):
+            # חישוב זמן דיווח אחרון (אם קיים ב-Firebase)
+            # הערה: כדאי להוסיף timestamp ב-update_team_in_db כדי שזה יהיה מדויק
+            last_seen = team.get('last_seen', 'אין נתון')
+            
+            # עיצוב חיווי סטטוס
+            status_emoji = "🟢" # ברירת מחדל פעיל
+            
+            table_rows.append({
+                "סטטוס": status_emoji,
+                "שם הצוות": team.get('name'),
+                "קוד": team.get('code'),
+                "חברי צוות": ", ".join(team.get('members', [])),
+                "מיקום אחרון": f"{team.get('lat', 0):.4f}, {team.get('lon', 0):.4f}"
+            })
+
+    if table_rows:
+        df = pd.DataFrame(table_rows)
+        # תצוגת טבלה מעוצבת של Streamlit
+        st.dataframe(df, use_container_width=True, hide_index=True)
+        
+        # בונוס: מונה כוחות מהיר
+        st.metric("סה\"כ צוותים פעילים בשטח", len(table_rows))
+    else:
+        st.info("אין צוותים פעילים כרגע.")
+else:
+    st.warning("לא נמצאו נתוני צוותים בבסיס הנתונים.")
