@@ -2,27 +2,23 @@ import streamlit as st
 import firebase_admin
 from firebase_admin import credentials, db
 import os
+import json
 
 # --- 1. פונקציית אתחול משופרת (מנקה זיכרון) ---
 def init_firebase():
     if not firebase_admin._apps:
         try:
             if "firebase" in st.secrets:
-                # הפיכה של ה-Secrets למילון רגיל
-                creds_dict = dict(st.secrets["firebase"])
-                
-                # ניקוי המפתח הפרטי מתווים שעלולים להרוס את החתימה
-                if "private_key" in creds_dict:
-                    # מוודא שכל ה-\n הופכים לירידות שורה אמיתיות
-                    creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+                creds_dict = json.loads(json.dumps(st.secrets["firebase"]))
+                # השורה הזו מטפלת בבעיה של ה-\n אם הוא בכל זאת מגיע כטקסט
+                creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
                 
                 cred = credentials.Certificate(creds_dict)
                 firebase_admin.initialize_app(cred, {
                     'databaseURL': "https://shavtsakedem-default-rtdb.europe-west1.firebasedatabase.app/"
                 })
-                st.success("✅ החיבור ל-Firebase הופעל דרך Secrets")
             else:
-                st.error("❌ לא נמצא מפתח ב-Secrets")
+                st.error("❌ לא נמצאו הגדרות ב-Secrets")
         except Exception as e:
             st.error(f"❌ שגיאה באתחול: {e}")
 
