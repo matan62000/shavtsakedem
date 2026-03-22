@@ -87,7 +87,7 @@ def init_firebase():
         except Exception as e:
             st.error(f"שגיאה בחיבור ל-Firebase: {e}")
 
-st_autorefresh(interval=30000, key="fscounter")
+st_autorefresh(interval=10000, key="fscounter")
 init_firebase()
 
 def get_teams_from_db():
@@ -136,10 +136,13 @@ with col1:
         
         if auto_up and loc and 'coords' in loc:
             lat, lon = loc['coords']['latitude'], loc['coords']['longitude']
-            if abs(st.session_state.get('last_lat_sent', 0) - lat) > 0.0001:
+            
+            # צמצום המרחק למינימום כדי שירגיש רציף בנסיעה
+            last_lat = st.session_state.get('last_lat_sent', 0)
+            if abs(last_lat - lat) > 0.00005: # רגישות גבוהה יותר
                 if update_team_in_db(team_id, lat, lon):
                     st.session_state.last_lat_sent = lat
-            st.info("🛰️ שידור חי פעיל. נא להשאיר דף פתוח.")
+            st.info("🛰️ שידור חי פעיל - אל תסגור את המסך")
         else:
             if st.button("📍 עדכן מיקום ידני"):
                 if loc and 'coords' in loc:
