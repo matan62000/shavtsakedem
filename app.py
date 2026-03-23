@@ -92,7 +92,7 @@ def update_team_in_db(team_id, lat, lon):
     except Exception:
         return False
 
-# --- 4. עיצוב ו-UI (CSS המלא והמפורט - כל ה-90 שורות חזרו) ---
+# --- 4. עיצוב ו-UI (CSS המלא והמפורט) ---
 
 logo_base64 = get_image_base64("kedem.png")
 bg_base64 = get_image_base64("kedem1.jpeg")
@@ -125,7 +125,7 @@ st.markdown(f"""
         font-family: 'Assistant', sans-serif;
     }}
 
-    /* התאמה לניידים - מניעת ציפה */
+    /* התאמה לניידים */
     @media (max-width: 768px) {{
         .stDeployButton {{display:none;}}
         #MainMenu {{visibility: hidden;}}
@@ -158,11 +158,6 @@ st.markdown(f"""
         transform: translateY(-1px);
     }}
 
-    div.stButton > button:active {{
-        transform: translateY(1px);
-    }}
-    
-    /* עיצוב קרדיט קבוע */
     .footer-credit {{
         position: fixed;
         left: 15px;
@@ -177,7 +172,6 @@ st.markdown(f"""
 
     header, footer {{visibility: hidden;}}
 
-    /* עיצוב הטבלה */
     .stDataFrame {{
         border-radius: 10px;
         overflow: hidden;
@@ -187,18 +181,17 @@ st.markdown(f"""
     <div class="footer-credit">נוצר ע"י מתן בוחבוט</div>
     """, unsafe_allow_html=True)
 
-# --- 5. לוגיקה מרכזית של האפליקציה ---
+# --- 5. לוגיקה מרכזית ---
 
-# מניעת רענון בזמן אינטראקציה עם המפה
-if "map_interaction" not in st.session_state:
-    st.session_state.map_interaction = False
+# ניהול רענון חכם למניעת קריסת המפה
+if "draw_update" not in st.session_state:
+    st.session_state.draw_update = False
 
-if not st.session_state.map_interaction:
+if not st.session_state.draw_update:
     st_autorefresh(interval=12000, key="fscounter")
 
 init_firebase()
 
-# כותרת ולוגו מרכזיים
 if logo_base64:
     st.markdown(f'<div style="text-align: center;"><img src="data:image/png;base64,{logo_base64}" width="85"></div>', unsafe_allow_html=True)
 
@@ -215,18 +208,16 @@ now = datetime.now(ISRAEL_TZ)
 
 col1, col2 = st.columns([1, 2])
 
-# --- פאנל דיווח וניהול (צד ימין) ---
+# --- פאנל ימין ---
 with col1:
     with st.expander("📲 פאנל דיווח מפקדים", expanded=True):
-        user_code = st.text_input("הכנס קוד מפקד אישי:", type="password", help="הקוד שקיבלת מהחמ\"ל")
+        user_code = st.text_input("הכנס קוד מפקד אישי:", type="password")
         found_team = next((t for t in teams_data if str(t.get('code')) == user_code), None)
         
         if found_team:
             team_id = found_team.get('id')
             st.success(f"מפקד זוהה: **{found_team.get('name')}**")
-            
             auto_up = st.toggle("🛰️ הפעל שידור מיקום אוטומטי", value=False, key="auto_up")
-            
             if loc and 'coords' in loc:
                 lat, lon = loc['coords']['latitude'], loc['coords']['longitude']
                 if auto_up:
@@ -234,158 +225,96 @@ with col1:
                     if abs(last_lat - lat) > 0.00001:
                         if update_team_in_db(team_id, lat, lon):
                             st.session_state.last_lat_sent = lat
-                    st.info("🛰️ המערכת משדרת מיקום חי לחמ\"ל")
                 elif st.button("📍 עדכן מיקום ידני עכשיו"):
                     if update_team_in_db(team_id, lat, lon):
-                        st.toast("המיקום עודכן בהצלחה!")
+                        st.toast("עודכן!")
                         st.rerun()
         elif user_code:
-            st.error("❌ קוד מפקד לא תקין")
+            st.error("❌ קוד לא תקין")
 
     with st.expander("🛠️ כלי ניהול חמ\"ל"):
-        st.write("פעולות ניקוי ותחזוקה:")
-        if st.button("🗑️ איפוס נתיבי תנועה (ניקוי קווים)"):
+        if st.button("🗑️ איפוס נתיבי תנועה"):
             try:
                 ref = db.reference('teams')
-                all_teams = ref.get()
-                if all_teams:
-                    for key in (all_teams.keys() if isinstance(all_teams, dict) else range(len(all_teams))):
-                        if all_teams[key]:
-                            db.reference(f'teams/{key}/history').delete()
-                    st.toast("נתיבי התנועה אופסו!")
-                    st.rerun()
-            except Exception as e:
-                st.error(f"שגיאה: {e}")
-        
-        st.divider()
-        if st.button("🎯 מחק את כל סימוני המפה (ציורים)"):
-            try:
-                db.reference('map_drawings').delete()
-                st.toast("כל הסימנים נמחקו מהמפה")
+                all_t = ref.get()
+                if all_t:
+                    for key in (all_t.keys() if isinstance(all_t, dict) else range(len(all_t))):
+                        if all_t[key]: db.reference(f'teams/{key}/history').delete()
                 st.rerun()
-            except Exception as e:
-                st.error(f"שגיאה במחיקת ציורים: {e}")
+            except: pass
+        
+        if st.button("🎯 מחק את כל סימוני המפה"):
+            db.reference('map_drawings').delete()
+            st.rerun()
 
-# --- מפה וסינון (צד שמאל) ---
+# --- פאנל שמאל (המפה) ---
 with col2:
     st.subheader("🌍 תמונת מצב כוחות")
-    
     active_teams = [t for t in teams_data if t.get('active')]
-    team_names = [t.get('name') for t in active_teams]
-    team_options = ["הצג את כל הצוותים"] + team_names
+    team_options = ["הצג את כל הצוותים"] + [t.get('name') for t in active_teams]
     selected_team = st.selectbox("התמקד בצוות ספציפי:", team_options)
 
-    # הגדרות מפה דינמיות
-    map_center = [31.5, 34.8]
-    map_zoom = 8
-
+    map_center, map_zoom = [31.5, 34.8], 8
     if selected_team != "הצג את כל הצוותים":
         target = next((t for t in active_teams if t.get('name') == selected_team), None)
         if target and 'lat' in target:
-            map_center = [target['lat'], target['lon']]
-            map_zoom = 15
+            map_center, map_zoom = [target['lat'], target['lon']], 15
 
-    # יצירת אובייקט המפה
+    # יצירת המפה בצורה יציבה
     m = folium.Map(location=map_center, zoom_start=map_zoom, control_scale=True)
 
-    # 1. טעינת סימונים (ציורים) מ-Firebase
-    draw_data = db.reference('map_drawings').get()
-    if draw_data:
-        for d_key in draw_data:
-            folium.GeoJson(draw_data[d_key], name="סימוני חמ\"ל").add_to(m)
+    # 1. טעינת סימונים
+    draw_db = db.reference('map_drawings').get()
+    if draw_db:
+        for d_key in draw_db:
+            folium.GeoJson(draw_db[d_key], name="סימון").add_to(m)
 
-    # 2. הוספת סרגל כלי ציור (Draw)
-    Draw(
-        export=False,
-        draw_options={
-            'polyline': True, 'rectangle': True, 'polygon': True, 'circle': True, 'marker': True
-        },
-        edit_options={'edit': False}
-    ).add_to(m)
+    # 2. כלי ציור
+    Draw(export=False, draw_options={'polyline':True, 'rectangle':True, 'polygon':True, 'circle':True, 'marker':True}, edit_options={'edit': False}).add_to(m)
 
     table_rows = []
-
-    # 3. הוספת הכוחות למפה
     for idx, team in enumerate(teams_data):
         if team.get('active') and 'lat' in team:
-            # חישוב נתוני סטטוס
-            status_color, emoji, icon_type = get_status_info(team.get('last_seen'), now)
-            path_color = PATH_COLORS[idx % len(PATH_COLORS)]
+            s_color, emoji, i_type = get_status_info(team.get('last_seen'), now)
+            p_color = PATH_COLORS[idx % len(PATH_COLORS)]
+            m_str = ", ".join(team.get('members', [])) if team.get('members') else "לא הוזנו"
             
-            # חברי צוות
-            members_list = team.get('members', [])
-            members_str = ", ".join(members_list) if members_list else "לא הוזנו חברים"
-            
-            # הכנת נתונים לטבלה (תמיד לכולם)
             table_rows.append({
-                "סטטוס": emoji,
-                "שם הצוות": team.get('name'),
-                "צבע נתיב": path_color,
-                "חברי צוות": members_str,
-                "עדכון אחרון": team.get('last_seen'),
-                "מיקום": f"{team['lat']:.4f}, {team['lon']:.4f}"
+                "סטטוס": emoji, "שם הצוות": team.get('name'), "צבע נתיב": p_color,
+                "חברי צוות": m_str, "עדכון אחרון": team.get('last_seen'), "מיקום": f"{team['lat']:.4f}, {team['lon']:.4f}"
             })
 
-            # סינון ויזואלי למפה
             if selected_team == "הצג את כל הצוותים" or team.get('name') == selected_team:
-                # ציור נתיב ההיסטוריה
                 if 'history' in team and isinstance(team['history'], dict):
                     points = [[p['lat'], p['lon']] for p in team['history'].values() if 'lat' in p]
                     if len(points) > 1:
-                        folium.PolyLine(
-                            points, 
-                            color=path_color, 
-                            weight=4, 
-                            opacity=0.6, 
-                            tooltip=f"נתיב: {team.get('name')}"
-                        ).add_to(m)
+                        folium.PolyLine(points, color=p_color, weight=4, opacity=0.6).add_to(m)
 
-                # הוספת סמן הצוות
                 folium.Marker(
                     [team['lat'], team['lon']],
-                    popup=f"<div style='direction:rtl; text-align:right;'><b>{team.get('name')}</b><br>חברים: {members_str}<br>מיקום: {team['lat']:.4f}, {team['lon']:.4f}<br>עדכון: {team.get('last_seen')}</div>",
-                    tooltip=f"{team.get('name')} (נתיב {path_color})",
-                    icon=folium.Icon(color=status_color, icon=icon_type, prefix="fa" if icon_type=="running" else "glyphicon")
+                    popup=f"<b>{team.get('name')}</b>",
+                    icon=folium.Icon(color=s_color, icon=i_type, prefix="fa" if i_type=="running" else "glyphicon")
                 ).add_to(m)
     
-    # הצגת המפה - שימוש ב-Key קבוע וסטטי למניעת "פתיחה וסגירה"
-    map_result = st_folium(m, width="100%", height=480, key="map_stable_static")
+    # הצגת המפה עם המפתח הסטטי הקריטי למניעת "פתיחה וסגירה"
+    map_result = st_folium(m, width="100%", height=480, key="main_static_map_system")
 
-    # לוגיקה לשמירת ציורים חדשים
+    # לוגיקת שמירה חכמה
     if map_result and map_result.get("all_drawings"):
-        all_drawings = map_result["all_drawings"]
-        existing_count = len(draw_data) if draw_data else 0
-        
-        if len(all_drawings) > existing_count:
-            # עצירת רענון כדי למנוע מסך לבן בזמן הכתיבה
-            st.session_state.map_interaction = True
-            new_shape = all_drawings[-1]
-            try:
-                db.reference('map_drawings').push(new_shape)
-                st.session_state.map_interaction = False
-                st.rerun()
-            except Exception:
-                st.session_state.map_interaction = False
+        all_draws = map_result["all_drawings"]
+        existing = len(draw_db) if draw_db else 0
+        if len(all_draws) > existing:
+            st.session_state.draw_update = True
+            db.reference('map_drawings').push(all_draws[-1])
+            st.session_state.draw_update = False
+            st.rerun()
 
-# --- 6. טבלה מסכמת ודוחות ---
+# --- 6. טבלה ודוחות ---
 if table_rows:
     st.markdown("---")
-    df = pd.DataFrame(table_rows)
-    
-    # סידור עמודות הטבלה בדיוק כפי שביקשת
-    cols = ["סטטוס", "שם הצוות", "צבע נתיב", "חברי צוות", "עדכון אחרון", "מיקום"]
-    df = df[cols]
-    
-    m1, m2 = st.columns([1, 1])
-    m1.metric("סה\"כ צוותים בשטח", len(table_rows))
-    
-    # כפתור הורדה לאקסל (CSV בקידוד UTF-16 לעברית)
+    df = pd.DataFrame(table_rows)[["סטטוס", "שם הצוות", "צבע נתיב", "חברי צוות", "עדכון אחרון", "מיקום"]]
+    c1, c2 = st.columns([1, 1])
+    c1.metric("צוותים בשטח", len(table_rows))
     csv_out = df.to_csv(index=False, encoding='utf-16', sep='\t').encode('utf-16')
-    m2.download_button(
-        label='📥 הורד דוח פעילות (Excel)',
-        data=csv_out,
-        file_name=f"shavtsakedem_report_{now.strftime('%H%M')}.csv",
-        mime='text/csv',
-    )
-    
+    c2.download_button('📥 הורד דוח אקסל', csv_out, f"report_{now.strftime('%H%M')}.csv", 'text/csv')
     st.dataframe(df, use_container_width=True, hide_index=True)
