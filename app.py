@@ -120,21 +120,12 @@ st.markdown(f"""
         font-family: 'Assistant', sans-serif;
     }}
 
-    /* תיקון לניידים - מניעת "ציפה" של תפריטים */
+    /* תיקון לניידים */
     @media (max-width: 768px) {{
-        [data-testid="stSidebar"] {{
-            width: 100% !important;
-        }}
-        /* הסתרת כפתור ה-Deploy והתפריטים המובנים של Streamlit שמפריעים בנייד */
         .stDeployButton {{display:none;}}
         #MainMenu {{visibility: hidden;}}
         header {{visibility: hidden;}}
         footer {{visibility: hidden;}}
-        
-        /* צמצום רווחים בנייד */
-        [data-testid="stVerticalBlock"] {{
-            padding: 10px;
-        }}
     }}
 
     div.stButton > button {{ 
@@ -142,9 +133,20 @@ st.markdown(f"""
         background-color: #2e5a27; color: white; height: 3em;
     }}
     
-    /* הסתרת אלמנטים מיותרים */
+    /* עיצוב קרדיט בתחתית */
+    .footer-credit {{
+        position: fixed;
+        left: 10px;
+        bottom: 10px;
+        font-size: 0.7rem;
+        color: rgba(0,0,0,0.5);
+        z-index: 100;
+    }}
+
     header, footer {{visibility: hidden;}}
     </style>
+    
+    <div class="footer-credit">נוצר ע"י מתן בוחבוט</div>
     """, unsafe_allow_html=True)
 
 # --- 5. לוגיקה מרכזית של האפליקציה ---
@@ -161,10 +163,9 @@ teams_data = get_teams_from_db()
 loc = get_geolocation()
 now = datetime.now(ISRAEL_TZ)
 
-# בנייד הטורים יהיו אחד מתחת לשני אוטומטית ב-Streamlit
 col1, col2 = st.columns([1, 2])
 
-# --- פאנל דיווח וניהול (צד ימין / עליון בנייד) ---
+# --- פאנל דיווח וניהול ---
 with col1:
     with st.expander("📲 דיווח מפקדים", expanded=True):
         user_code = st.text_input("הכנס קוד מפקד:", type="password")
@@ -189,7 +190,6 @@ with col1:
         elif user_code:
             st.error("❌ קוד שגוי")
 
-    # --- ניהול חמ"ל (בתוך Expander כדי לחסוך מקום בנייד) ---
     with st.expander("🛠️ ניהול חמ\"ל"):
         if st.button("🗑️ נקה מסלולי תנועה"):
             try:
@@ -204,7 +204,7 @@ with col1:
             except Exception as e:
                 st.error(f"שגיאה: {e}")
 
-# --- מפה וסינון (צד שמאל / תחתון בנייד) ---
+# --- מפה וסינון ---
 with col2:
     active_teams = [t for t in teams_data if t.get('active')]
     team_options = ["הצג את כל הצוותים"] + [t.get('name') for t in active_teams]
