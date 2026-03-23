@@ -77,6 +77,8 @@ st.markdown(f"""
     [data-testid="stVerticalBlock"] {{ background-color: rgba(255, 255, 255, 0.92); padding: 20px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }}
     html, body, [data-testid="stSidebar"], .stMarkdown {{ direction: rtl; text-align: right; font-family: 'Assistant', sans-serif; }}
     div.stButton > button {{ width: 100%; border-radius: 10px; font-weight: bold; background-color: #2e5a27; color: white; height: 3.5em; transition: 0.3s; }}
+    /* קיבוע גובה למפה למניעת התכווצות בטלפון */
+    iframe {{ min-height: 500px !important; }}
     .footer-credit {{ position: fixed; left: 15px; bottom: 15px; font-size: 0.7rem; color: rgba(0,0,0,0.5); z-index: 100; }}
     header, footer {{visibility: hidden;}}
     </style>
@@ -84,10 +86,11 @@ st.markdown(f"""
     """, unsafe_allow_html=True)
 
 # --- 5. לוגיקה וניהול רענון ---
-if "last_map_update" not in st.session_state: st.session_state.last_map_update = 0
+if "edit_mode" not in st.session_state: st.session_state.edit_mode = False
 
-# רענון אוטומטי - מושבת בזמן שיש אינטראקציה עם המפה
-st_autorefresh(interval=20000, key="fscounter")
+# רענון אוטומטי - נעצר לחלוטין אם אנחנו במצב עריכה
+if not st.session_state.edit_mode:
+    st_autorefresh(interval=15000, key="fscounter")
 
 init_firebase()
 if logo_base64: st.markdown(f'<div style="text-align: center;"><img src="data:image/png;base64,{logo_base64}" width="85"></div>', unsafe_allow_html=True)
@@ -112,12 +115,15 @@ with col1:
         if team:
             st.success(f"שלום {team.get('name')}")
             if loc and 'coords' in loc:
-                lat, lon = loc['coords']['latitude'], loc['coords']['longitude']
                 if st.button("📍 עדכן מיקום עכשיו"):
-                    if update_team_in_db(team.get('id'), lat, lon): st.rerun()
-        elif u_code: st.error("❌ קוד שגוי")
+                    update_team_in_db(team.get('id'), loc['coords']['latitude'], loc['coords']['longitude'])
+                    st.rerun()
 
     with st.expander("🛠️ ניהול חמ\"ל"):
+        st.session_state.edit_mode = st.toggle("🎨 מצב ציור/עריכת מפה", value=st.session_state.edit_mode)
+        if st.session_state.edit_mode:
+            st.warning("⚠️ הרענון האוטומטי כבוי בזמן ציור")
+        
         if st.button("🗑️ איפוס נתיבים"):
             ref = db.reference('teams').get()
             if ref:
@@ -146,14 +152,16 @@ with col2:
             try: folium.GeoJson(d).add_to(m)
             except: continue
 
-    Draw(export=False, draw_options={'polyline':True,'rectangle':True,'polygon':True,'circle':False,'marker':True}, edit_options={'edit': False}).add_to(m)
+    # הוספת כלי הציור רק אם מצב עריכה פעיל
+    if st.session_state.edit_mode:
+        Draw(export=False, draw_options={'polyline':True,'rectangle':True,'polygon':True,'circle':False,'marker':True}, edit_options={'edit': False}).add_to(m)
 
     table_rows = []
     for idx, t in enumerate(teams_data):
         if t.get('active') and 'lat' in t:
             color, emo, icon = get_status_info(t.get('last_seen'), now)
             p_color = PATH_COLORS[idx % len(PATH_COLORS)]
-            table_rows.append({"סטטוס": emo, "שם הצוות": t.get('name'), "עדכון אחרון": t.get('last_seen'), "מיקום": f"{t['lat']:.4f}, {t['lon']:.4f}"})
+            table_rows.append({"סטטוס": emo, "שם": t.get('name'), "עדכון": t.get('last_seen'), "מיקום": f"{t['lat']:.4f}, {t['lon']:.4f}"})
             
             if sel_name == "הצג הכל" or t.get('name') == sel_name:
                 if 'history' in t and isinstance(t['history'], dict):
@@ -161,18 +169,15 @@ with col2:
                     if len(pts) > 1: folium.PolyLine(pts, color=p_color, weight=4, opacity=0.6).add_to(m)
                 folium.Marker([t['lat'], t['lon']], popup=t.get('name'), icon=folium.Icon(color=color, icon=icon, prefix="fa" if icon=="running" else "glyphicon")).add_to(m)
 
-    # הצגת המפה עם גובה קבוע לתיקון בעיית הטלפון
-    map_res = st_folium(m, height=500, key="STATIC_MAP_V5", use_container_width=True)
+    # המפה עכשיו יציבה לחלוטין
+    map_res = st_folium(m, height=500, key="MAP_STABLE_V6", use_container_width=True)
 
-    if map_res and map_res.get("all_drawings"):
-        curr_draws = len(map_res["all_drawings"])
-        prev_draws = len(draw_db) if draw_db else 0
-        if curr_draws > prev_draws:
+    if st.session_state.edit_mode and map_res and map_res.get("all_drawings"):
+        if len(map_res["all_drawings"]) > (len(draw_db) if draw_db else 0):
             db.reference('map_drawings').push(map_res["all_drawings"][-1])
             st.rerun()
 
 # --- 6. טבלה ---
 if table_rows:
     st.markdown("---")
-    df = pd.DataFrame(table_rows)
-    st.dataframe(df, use_container_width=True, hide_index=True)
+    st.dataframe(pd.DataFrame(table_rows), use_container_width=True, hide_index=True)
