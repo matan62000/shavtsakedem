@@ -48,13 +48,19 @@ def get_status_info(last_seen_str, now_dt):
         return "red", "🔴", "info-sign"
     except: return "red", "🔴", "info-sign"
 
-# --- 3. Database ---
+# --- 3. Database Functions ---
 def get_teams_from_db():
     try:
         ref = db.reference('teams').get()
         if not ref: return []
         return [v for v in ref.values() if v] if isinstance(ref, dict) else [t for t in ref if t]
     except: return []
+
+# פונקציה חדשה למשיכת הודעת ההתראה
+def get_broadcast_msg():
+    try:
+        return db.reference('broadcast').get() or ""
+    except: return ""
 
 # --- 4. עיצוב CSS - המלבן הלבן + תיקון כפתורים ---
 logo_base64 = get_image_base64("kedem.png")
@@ -78,6 +84,26 @@ st.markdown(f"""
         margin-bottom: 30px !important;
     }}
 
+    /* עיצוב תיבת ההתראה המתפרצת */
+    .broadcast-box {{
+        background-color: #fff3cd;
+        border: 2px solid #ffeeba;
+        color: #856404;
+        padding: 18px;
+        border-radius: 15px;
+        margin-bottom: 25px;
+        text-align: center;
+        font-weight: bold;
+        font-size: 1.2rem;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        animation: pulse 2s infinite;
+    }}
+    @keyframes pulse {{
+        0% {{ transform: scale(1); }}
+        50% {{ transform: scale(1.02); }}
+        100% {{ transform: scale(1); }}
+    }}
+
     html, body, [data-testid="stSidebar"], .stMarkdown {{ 
         direction: rtl; text-align: right; font-family: 'Assistant', sans-serif; color: #1e3d1a !important; 
     }}
@@ -91,7 +117,7 @@ st.markdown(f"""
         border: none; transition: 0.3s;
     }}
     
-    div.stButton > button p {{ color: #ffffff !important; }} /* תיקון ספציפי לטקסט פנימי */
+    div.stButton > button p {{ color: #ffffff !important; }} 
 
     div.stButton > button:hover {{ background-color: #3e7a35; transform: translateY(-1px); }}
 
@@ -125,6 +151,11 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+# --- הצגת הודעה מתפרצת אם קיימת ---
+broadcast_msg = get_broadcast_msg()
+if broadcast_msg:
+    st.markdown(f'<div class="broadcast-box">📢 הודעת חמ"ל: {broadcast_msg}</div>', unsafe_allow_html=True)
+
 teams_data = get_teams_from_db()
 loc = get_geolocation()
 now = datetime.now(ISRAEL_TZ)
@@ -142,6 +173,18 @@ with col1:
                 st.rerun()
 
     with st.expander("🛠️ ניהול חמ\"ל"):
+        # --- חלק ניהול ההודעות החדש ---
+        st.markdown("### 📢 הפצת הודעה")
+        new_msg = st.text_input("הקלד הודעה לכל הצוותים:", value=broadcast_msg)
+        c1, c2 = st.columns(2)
+        if c1.button("📣 שלח"):
+            db.reference('broadcast').set(new_msg)
+            st.rerun()
+        if c2.button("❌ מחק"):
+            db.reference('broadcast').set("")
+            st.rerun()
+        st.markdown("---")
+        
         st.session_state.lock_refresh = st.checkbox("🔒 נעל רענון (לציור)", value=st.session_state.lock_refresh)
         if st.button("🗑️ איפוס נתיבי תנועה"):
             ref = db.reference('teams').get()
@@ -177,7 +220,8 @@ with col2:
         if t.get('active') and 'lat' in t:
             color, emo, icon = get_status_info(t.get('last_seen'), now)
             p_color = PATH_COLORS[idx % len(PATH_COLORS)]
-            # הוספת חברי צוות לטבלה
+            
+            # עמודת חברי צוות (נשמר בדיוק כפי שהיה)
             members_list = ", ".join(t.get('members', [])) if t.get('members') else "לא הוזנו"
             table_rows.append({
                 "סטטוס": emo, 
@@ -192,7 +236,7 @@ with col2:
                     if len(pts) > 1: folium.PolyLine(pts, color=p_color, weight=4, opacity=0.6).add_to(m)
                 folium.Marker([t['lat'], t['lon']], popup=t.get('name'), icon=folium.Icon(color=color, icon=icon, prefix="fa" if icon=="running" else "glyphicon")).add_to(m)
 
-    map_res = st_folium(m, height=520, key="FINAL_FIX_V16", use_container_width=True)
+    map_res = st_folium(m, height=520, key="FINAL_BROADCAST_V17", use_container_width=True)
 
     if map_res and map_res.get("last_active_drawing"):
         new_draw = map_res["last_active_drawing"]
@@ -208,7 +252,7 @@ if table_rows:
     col_met, col_btn = st.columns([1, 1])
     col_met.metric("צוותים פעילים", len(table_rows))
     
-    # כפתור הורדה לאקסל
+    # כפתור הורדה לאקסל (נשמר בדיוק כפי שהיה)
     csv_data = df.to_csv(index=False, encoding='utf-16', sep='\t').encode('utf-16')
     col_btn.download_button("📥 הורד דוח אקסל", data=csv_data, file_name=f"report_{now.strftime('%H%M')}.csv", mime='text/csv')
     
