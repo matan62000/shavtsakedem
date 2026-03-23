@@ -187,13 +187,13 @@ st.markdown(f"""
     <div class="footer-credit">נוצר ע"י מתן בוחבוט</div>
     """, unsafe_allow_html=True)
 
-# --- 5. לוגיקה מרכזית ורענון חכם ---
+# --- 5. לוגיקה מרכזית של האפליקציה ---
 
 # מניעת רענון בזמן אינטראקציה עם המפה למניעת מסך לבן
-if "draw_update" not in st.session_state:
-    st.session_state.draw_update = False
+if "is_drawing_active" not in st.session_state:
+    st.session_state.is_drawing_active = False
 
-if not st.session_state.draw_update:
+if not st.session_state.is_drawing_active:
     st_autorefresh(interval=12000, key="fscounter") # הגדלת מרווח ל-12 שניות ליציבות
 
 init_firebase()
@@ -308,47 +308,79 @@ with col2:
     # 3. הוספת הכוחות למפה
     for idx, team in enumerate(teams_data):
         if team.get('active') and 'lat' in team:
+            # חישוב נתוני סטטוס
             status_color, emoji, icon_type = get_status_info(team.get('last_seen'), now)
             path_color = PATH_COLORS[idx % len(PATH_COLORS)]
-            members_list = team.get('members', [])
-            members_str = ", ".join(members_list) if members_list else "לא הוזנו"
             
+            # חברי צוות
+            members_list = team.get('members', [])
+            members_str = ", ".join(members_list) if members_list else "לא הוזנו חברים"
+            
+            # הכנת נתונים לטבלה (תמיד לכולם)
             table_rows.append({
-                "סטטוס": emoji, "שם הצוות": team.get('name'), "צבע נתיב": path_color,
-                "חברי צוות": members_str, "עדכון אחרון": team.get('last_seen'), "מיקום": f"{team['lat']:.4f}, {team['lon']:.4f}"
+                "סטטוס": emoji,
+                "שם הצוות": team.get('name'),
+                "צבע נתיב": path_color,
+                "חברי צוות": members_str,
+                "עדכון אחרון": team.get('last_seen'),
+                "מיקום": f"{team['lat']:.4f}, {team['lon']:.4f}"
             })
 
+            # סינון ויזואלי למפה
             if selected_team == "הצג את כל הצוותים" or team.get('name') == selected_team:
+                # ציור נתיב ההיסטוריה
                 if 'history' in team and isinstance(team['history'], dict):
                     points = [[p['lat'], p['lon']] for p in team['history'].values() if 'lat' in p]
                     if len(points) > 1:
-                        folium.PolyLine(points, color=path_color, weight=4, opacity=0.6).add_to(m)
+                        folium.PolyLine(
+                            points, 
+                            color=path_color, 
+                            weight=4, 
+                            opacity=0.6, 
+                            tooltip=f"נתיב: {team.get('name')}"
+                        ).add_to(m)
 
+                # הוספת סמן הצוות
                 folium.Marker(
                     [team['lat'], team['lon']],
-                    popup=f"<b>{team.get('name')}</b>",
+                    popup=f"<div style='direction:rtl; text-align:right;'><b>{team.get('name')}</b><br>חברים: {members_str}<br>עדכון: {team.get('last_seen')}</div>",
                     icon=folium.Icon(color=status_color, icon=icon_type, prefix="fa" if icon_type=="running" else "glyphicon")
                 ).add_to(m)
     
-    # הצגת המפה עם מנגנון הגנה נגד מסך לבן
-    map_result = st_folium(m, width="100%", height=480, key="main_map_system_365")
+    # הצגת המפה עם מנגנון הגנה נגד מסך לבן - Key חדש לגמרי
+    map_result = st_folium(m, width="100%", height=480, key="FINAL_STABLE_MAP")
 
     # לוגיקה לשמירת ציורים חדשים
     if map_result and map_result.get("all_drawings"):
         all_drawings = map_result["all_drawings"]
         existing_count = len(draw_data) if draw_data else 0
         if len(all_drawings) > existing_count:
-            st.session_state.draw_update = True
+            st.session_state.is_drawing_active = True
             db.reference('map_drawings').push(all_drawings[-1])
-            st.session_state.draw_update = False
+            st.session_state.is_drawing_active = False
             st.rerun()
 
 # --- 6. טבלה מסכמת ודוחות ---
 if table_rows:
     st.markdown("---")
-    df = pd.DataFrame(table_rows)[["סטטוס", "שם הצוות", "צבע נתיב", "חברי צוות", "עדכון אחרון", "מיקום"]]
+    df = pd.DataFrame(table_rows)
+    
+    # סידור עמודות הטבלה בדיוק כפי שביקשת
+    cols = ["סטטוס", "שם הצוות", "צבע נתיב", "חברי צוות", "עדכון אחרון", "מיקום"]
+    df = df[cols]
+    
     m1, m2 = st.columns([1, 1])
     m1.metric("סה\"כ צוותים בשטח", len(table_rows))
+    
+    # כפתור הורדה לאקסל (CSV בקידוד UTF-16 לעברית)
     csv_out = df.to_csv(index=False, encoding='utf-16', sep='\t').encode('utf-16')
-    m2.download_button(label='📥 הורד דוח פעילות (Excel)', data=csv_out, file_name=f"report_{now.strftime('%H%M')}.csv", mime='text/csv')
+    m2.download_button(
+        label='📥 הורד דוח פעילות (Excel)',
+        data=csv_out,
+        file_name=f"shavtsakedem_report_{now.strftime('%H%M')}.csv",
+        mime='text/csv',
+    )
+    
     st.dataframe(df, use_container_width=True, hide_index=True)
+
+# סוף קוד
