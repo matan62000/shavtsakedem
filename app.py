@@ -15,6 +15,9 @@ import pytz
 st.set_page_config(page_title="שבצ''קדם - ניהול בזמן אמת", layout="wide")
 ISRAEL_TZ = pytz.timezone('Asia/Jerusalem')
 
+# רשימת צבעים לנתיבים (כדי להבדיל בין צוותים)
+PATH_COLORS = ['blue', 'purple', 'darkred', 'orange', 'cadetblue', 'darkgreen', 'black', 'magenta']
+
 # --- 2. פונקציות עזר (Utils) ---
 
 @st.cache_data
@@ -162,7 +165,7 @@ with col1:
     elif user_code:
         st.error("❌ קוד שגוי")
 
-    # --- חדש: ניהול חמ"ל (מחיקת היסטוריה) ---
+    # --- ניהול חמ"ל (מחיקת היסטוריה) ---
     st.markdown("---")
     st.subheader("🛠️ ניהול חמ\"ל")
     if st.button("🗑️ נקה מסלולי תנועה (איפוס נתיבים)"):
@@ -170,7 +173,6 @@ with col1:
             ref = db.reference('teams')
             all_teams = ref.get()
             if all_teams:
-                # מחיקת ה-history לכל צוות בנפרד
                 for key in (all_teams.keys() if isinstance(all_teams, dict) else range(len(all_teams))):
                     if all_teams[key]:
                         db.reference(f'teams/{key}/history').delete()
@@ -183,16 +185,13 @@ with col1:
 with col2:
     st.subheader("🌍 מפת כוחות")
     
-    # --- חדש: תיבת סינון צוותים ---
     active_teams = [t for t in teams_data if t.get('active')]
     team_options = ["הצג את כל הצוותים"] + [t.get('name') for t in active_teams]
     selected_team = st.selectbox("התמקד בצוות ספציפי:", team_options)
 
-    # הגדרת מיקום התחלתי למפה
     map_center = [31.5, 34.8]
     map_zoom = 8
 
-    # אם נבחר צוות, המפה תשתגר אליו
     if selected_team != "הצג את כל הצוותים":
         target = next((t for t in active_teams if t.get('name') == selected_team), None)
         if target and 'lat' in target:
@@ -202,47 +201,56 @@ with col2:
     m = folium.Map(location=map_center, zoom_start=map_zoom)
     table_rows = []
 
-    for team in teams_data:
-        # פילטר ויזואלי למפה
+    # לולאה להוספת צוותים למפה
+    for idx, team in enumerate(teams_data):
         if selected_team != "הצג את כל הצוותים" and team.get('name') != selected_team:
             continue
 
         if team.get('active') and 'lat' in team:
-            color, emoji, icon_type = get_status_info(team.get('last_seen'), now)
+            status_color, emoji, icon_type = get_status_info(team.get('last_seen'), now)
+            
+            # בחירת צבע נתיב ייחודי לצוות לפי האינדקס שלו ברשימה
+            path_color = PATH_COLORS[idx % len(PATH_COLORS)]
+            
             members_list = team.get('members', [])
             members_str = ", ".join(members_list) if members_list else "אין רשימת חברים"
             
-            # ציור נתיב (היסטוריה)
+            # ציור נתיב (היסטוריה) עם צבע ייחודי
             if 'history' in team and isinstance(team['history'], dict):
                 points = [[p['lat'], p['lon']] for p in team['history'].values() if 'lat' in p]
                 if len(points) > 1:
-                    folium.PolyLine(points, color=color, weight=2, opacity=0.5, dash_array='5').add_to(m)
+                    folium.PolyLine(
+                        points, 
+                        color=path_color, 
+                        weight=4, 
+                        opacity=0.7, 
+                        tooltip=f"מסלול: {team.get('name')}"
+                    ).add_to(m)
 
-            # הוספת סמן למפה
+            # הוספת סמן למפה (צבע הסמן מעיד על סטטוס פעילות)
             folium.Marker(
                 [team['lat'], team['lon']],
                 popup=f"<b>{team.get('name')}</b><br>חברים: {members_str}<br>עדכון: {team.get('last_seen')}",
-                tooltip=team.get('name'),
-                icon=folium.Icon(color=color, icon=icon_type, prefix="fa" if icon_type=="running" else "glyphicon")
+                tooltip=f"{team.get('name')} (נתיב ב-{path_color})",
+                icon=folium.Icon(color=status_color, icon=icon_type, prefix="fa" if icon_type=="running" else "glyphicon")
             ).add_to(m)
 
-            # הוספה לטבלה
             table_rows.append({
                 "סטטוס": emoji,
                 "שם הצוות": team.get('name'),
+                "צבע נתיב": path_color,
                 "חברי צוות": members_str,
                 "עדכון אחרון": team.get('last_seen'),
                 "מיקום": f"{team['lat']:.4f}, {team['lon']:.4f}"
             })
     
-    # שימוש ב-selected_team כחלק מה-key כדי להכריח את המפה להתרענן בשינוי סינון
     st_folium(m, width="100%", height=450, key=f"main_map_{selected_team}")
 
 # --- 6. טבלה ודוחות ---
 if table_rows:
     st.markdown("---")
     df = pd.DataFrame(table_rows)
-    columns_order = ["סטטוס", "שם הצוות", "חברי צוות", "עדכון אחרון", "מיקום"]
+    columns_order = ["סטטוס", "שם הצוות", "צבע נתיב", "חברי צוות", "עדכון אחרון", "מיקום"]
     df = df[columns_order]
     
     c1, c2 = st.columns([1, 1])
