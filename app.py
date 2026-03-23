@@ -56,7 +56,7 @@ def get_teams_from_db():
         return [v for v in ref.values() if v] if isinstance(ref, dict) else [t for t in ref if t]
     except: return []
 
-# --- 4. עיצוב CSS המקצועי (מלבנים לבנים לקריאות) ---
+# --- 4. עיצוב CSS המדויק (תיקון החלל הריק) ---
 logo_base64 = get_image_base64("kedem.png")
 bg_base64 = get_image_base64("kedem1.jpeg")
 bg_style = f"[data-testid='stAppViewContainer'] {{ background-image: url('data:image/png;base64,{bg_base64}'); background-size: cover; background-position: center; background-attachment: fixed; }}" if bg_base64 else ""
@@ -66,38 +66,23 @@ st.markdown(f"""
     @import url('https://fonts.googleapis.com/css2?family=Assistant:wght@400;700&display=swap');
     {bg_style}
     
-    /* ביטול הרקע הלבן האוטומטי שיוצר חללים ריקים */
-    [data-testid="stVerticalBlock"] {{ background-color: transparent !important; box-shadow: none !important; }}
+    /* הפיכת הבלוקים הראשיים לשקופים כדי שלא ייווצר מלבן ריק */
+    [data-testid="stVerticalBlock"] {{ background-color: transparent !important; box-shadow: none !important; gap: 0.5rem !important; }}
     
-    /* יצירת מלבן לבן לכותרת */
-    .title-card {{
-        background-color: rgba(255, 255, 255, 0.85);
-        padding: 15px;
-        border-radius: 20px;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        margin-bottom: 20px;
-        text-align: center;
+    /* עיצוב המלבן הלבן עבור הכותרת, המפה, הפאנלים והטבלה */
+    .element-container, .stExpander, .stDataFrame, div[data-testid="stMetricBlock"], .leaflet-container {{
+        background-color: rgba(255, 255, 255, 0.92) !important;
+        border-radius: 15px !important;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
+        padding: 5px !important;
     }}
     
-    /* יצירת מלבן לבן לתוכן הראשי (פאנלים ומפה) */
-    .content-card {{
-        background-color: rgba(255, 255, 255, 0.9);
-        padding: 20px;
-        border-radius: 20px;
-        box-shadow: 0 8px 32px rgba(0,0,0,0.15);
-    }}
-
-    /* עיצוב פנימי של אלמנטים */
-    .stExpander, .stDataFrame, div[data-testid="stMetricBlock"] {{ 
-        background-color: white !important;
-        border-radius: 12px !important;
-        border: 1px solid #eee !important;
-    }}
+    /* תיקון מרווחים למפה */
+    iframe {{ border-radius: 15px; border: none; }}
 
     html, body, [data-testid="stSidebar"], .stMarkdown {{ direction: rtl; text-align: right; font-family: 'Assistant', sans-serif; }}
     
-    div.stButton > button {{ width: 100%; border-radius: 10px; font-weight: bold; background-color: #2e5a27; color: white; height: 3.5em; transition: 0.3s; }}
-    iframe {{ border-radius: 15px; border: 1px solid #ddd; }}
+    div.stButton > button {{ width: 100%; border-radius: 10px; font-weight: bold; background-color: #2e5a27; color: white; height: 3em; transition: 0.3s; }}
     
     .footer-credit {{ position: fixed; left: 15px; bottom: 15px; font-size: 0.75rem; color: rgba(0,0,0,0.6); background-color: rgba(255,255,255,0.4); padding: 2px 8px; border-radius: 5px; z-index: 100; }}
     header, footer {{visibility: hidden;}}
@@ -112,12 +97,12 @@ if not st.session_state.lock_refresh:
 
 init_firebase()
 
-# כותרת בתוך מלבן לבן ייעודי
+# כותרת ולוגו בתוך מלבן מעוצב
 st.markdown(f"""
-<div class='title-card'>
-    <img src="data:image/png;base64,{logo_base64}" width="80"><br>
-    <h1 style='margin: 0; font-size: 2rem; color: #1e3d1a;'>מערכת שבצ'קדם</h1>
-    <p style='color: #4a4a4a; font-size: 0.9rem; margin: 0; font-weight: bold;'>ניהול ושליטה בכוחות - נוצר ע"י מתן בוחבוט</p>
+<div style='background-color: rgba(255, 255, 255, 0.9); padding: 15px; border-radius: 20px; text-align: center; margin-bottom: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);'>
+    <img src="data:image/png;base64,{logo_base64}" width="70"><br>
+    <h1 style='margin: 0; font-size: 1.8rem; color: #1e3d1a;'>מערכת שבצ'קדם</h1>
+    <p style='margin: 0; font-size: 0.9rem; color: #4a4a4a; font-weight: bold;'>ניהול ושליטה בכוחות - נוצר ע"י מתן בוחבוט</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -125,77 +110,71 @@ teams_data = get_teams_from_db()
 loc = get_geolocation()
 now = datetime.now(ISRAEL_TZ)
 
-# גוף האפליקציה בתוך קונטיינר לבן לקריאות מקסימלית
-with st.container():
-    st.markdown('<div class="content-card">', unsafe_allow_html=True)
-    
-    col1, col2 = st.columns([1, 2])
+col1, col2 = st.columns([1, 2])
 
-    with col1:
-        with st.expander("📲 פאנל דיווח מפקדים", expanded=True):
-            u_code = st.text_input("קוד מפקד:", type="password")
-            team = next((t for t in teams_data if str(t.get('code')) == u_code), None)
-            if team and loc and 'coords' in loc:
-                st.success(f"זוהה: {team.get('name')}")
-                if st.button("📍 עדכן מיקום עכשיו"):
-                    db.reference(f'teams/{team.get("id")}').update({'lat': loc['coords']['latitude'], 'lon': loc['coords']['longitude'], 'active': True, 'last_seen': now.strftime("%H:%M:%S")})
-                    st.rerun()
-
-        with st.expander("🛠️ ניהול חמ\"ל"):
-            st.session_state.lock_refresh = st.checkbox("🔒 נעל רענון (לציור)", value=st.session_state.lock_refresh)
-            if st.button("🗑️ איפוס נתיבים"):
-                ref = db.reference('teams').get()
-                if ref:
-                    for k in (ref.keys() if isinstance(ref, dict) else range(len(ref))):
-                        if ref[k]: db.reference(f'teams/{k}/history').delete()
-                st.rerun()
-            if st.button("🎯 מחק את כל הציורים"):
-                db.reference('map_drawings').delete()
+with col1:
+    with st.expander("📲 פאנל דיווח מפקדים", expanded=True):
+        u_code = st.text_input("קוד מפקד:", type="password")
+        team = next((t for t in teams_data if str(t.get('code')) == u_code), None)
+        if team and loc and 'coords' in loc:
+            st.success(f"זוהה: {team.get('name')}")
+            if st.button("📍 עדכן מיקום עכשיו"):
+                db.reference(f'teams/{team.get("id")}').update({'lat': loc['coords']['latitude'], 'lon': loc['coords']['longitude'], 'active': True, 'last_seen': now.strftime("%H:%M:%S")})
                 st.rerun()
 
-    with col2:
-        st.subheader("🌍 תמונת מצב")
-        active_teams = [t for t in teams_data if t.get('active')]
-        sel_name = st.selectbox("מיקוד בצוות:", ["הצג הכל"] + [t.get('name') for t in active_teams])
+    with st.expander("🛠️ ניהול חמ\"ל"):
+        st.session_state.lock_refresh = st.checkbox("🔒 נעל רענון (לציור)", value=st.session_state.lock_refresh)
+        if st.button("🗑️ איפוס נתיבים"):
+            ref = db.reference('teams').get()
+            if ref:
+                for k in (ref.keys() if isinstance(ref, dict) else range(len(ref))):
+                    if ref[k]: db.reference(f'teams/{k}/history').delete()
+            st.rerun()
+        if st.button("🎯 מחק את כל הציורים"):
+            db.reference('map_drawings').delete()
+            st.rerun()
 
-        m_lat, m_lon, m_zoom = 31.5, 34.8, 8
-        if sel_name != "הצג הכל":
-            target = next((t for t in active_teams if t.get('name') == sel_name), None)
-            if target: m_lat, m_lon, m_zoom = target['lat'], target['lon'], 15
+with col2:
+    # כותרת המפה בתוך רקע לבן לקריאות
+    st.markdown("<div style='background-color: white; padding: 5px 15px; border-radius: 10px; margin-bottom: 5px; display: inline-block;'><b>🌍 תמונת מצב</b></div>", unsafe_allow_html=True)
+    active_teams = [t for t in teams_data if t.get('active')]
+    sel_name = st.selectbox("מיקוד בצוות:", ["הצג הכל"] + [t.get('name') for t in active_teams])
 
-        m = folium.Map(location=[m_lat, m_lon], zoom_start=m_zoom, control_scale=True)
-        
-        draw_db = db.reference('map_drawings').get()
-        if draw_db:
-            for d in draw_db.values():
-                try:
-                    if d and 'geometry' in d:
-                        folium.GeoJson(d, style_function=lambda x: {'fillColor': 'orange', 'color': 'orange', 'weight': 2}).add_to(m)
-                except: continue
+    m_lat, m_lon, m_zoom = 31.5, 34.8, 8
+    if sel_name != "הצג הכל":
+        target = next((t for t in active_teams if t.get('name') == sel_name), None)
+        if target: m_lat, m_lon, m_zoom = target['lat'], target['lon'], 15
 
-        Draw(export=False, draw_options={'polyline':True,'rectangle':True,'polygon':True,'circle':False,'marker':True}, edit_options={'edit': False}).add_to(m)
+    m = folium.Map(location=[m_lat, m_lon], zoom_start=m_zoom, control_scale=True)
+    draw_db = db.reference('map_drawings').get()
+    if draw_db:
+        for d in draw_db.values():
+            try:
+                if d and 'geometry' in d:
+                    folium.GeoJson(d, style_function=lambda x: {'fillColor': 'orange', 'color': 'orange', 'weight': 2}).add_to(m)
+            except: continue
 
-        table_rows = []
-        for idx, t in enumerate(teams_data):
-            if t.get('active') and 'lat' in t:
-                color, emo, icon = get_status_info(t.get('last_seen'), now)
-                p_color = PATH_COLORS[idx % len(PATH_COLORS)]
-                table_rows.append({"סטטוס": emo, "שם הצוות": t.get('name'), "חברי צוות": ", ".join(t.get('members', [])) if t.get('members') else "לא הוזנו", "עדכון": t.get('last_seen'), "מיקום": f"{t['lat']:.4f}, {t['lon']:.4f}"})
-                if sel_name == "הצג הכל" or t.get('name') == sel_name:
-                    if 'history' in t and isinstance(t['history'], dict):
-                        pts = [[p['lat'], p['lon']] for p in t['history'].values() if 'lat' in p]
-                        if len(pts) > 1: folium.PolyLine(pts, color=p_color, weight=4, opacity=0.6).add_to(m)
-                    folium.Marker([t['lat'], t['lon']], popup=t.get('name'), icon=folium.Icon(color=color, icon=icon, prefix="fa" if icon=="running" else "glyphicon")).add_to(m)
+    Draw(export=False, draw_options={'polyline':True,'rectangle':True,'polygon':True,'circle':False,'marker':True}, edit_options={'edit': False}).add_to(m)
 
-        map_res = st_folium(m, height=520, key="V10_STABLE_MAP", use_container_width=True)
+    table_rows = []
+    for idx, t in enumerate(teams_data):
+        if t.get('active') and 'lat' in t:
+            color, emo, icon = get_status_info(t.get('last_seen'), now)
+            p_color = PATH_COLORS[idx % len(PATH_COLORS)]
+            table_rows.append({"סטטוס": emo, "שם הצוות": t.get('name'), "חברי צוות": ", ".join(t.get('members', [])) if t.get('members') else "לא הוזנו", "עדכון": t.get('last_seen'), "מיקום": f"{t['lat']:.4f}, {t['lon']:.4f}"})
+            if sel_name == "הצג הכל" or t.get('name') == sel_name:
+                if 'history' in t and isinstance(t['history'], dict):
+                    pts = [[p['lat'], p['lon']] for p in t['history'].values() if 'lat' in p]
+                    if len(pts) > 1: folium.PolyLine(pts, color=p_color, weight=4, opacity=0.6).add_to(m)
+                folium.Marker([t['lat'], t['lon']], popup=t.get('name'), icon=folium.Icon(color=color, icon=icon, prefix="fa" if icon=="running" else "glyphicon")).add_to(m)
 
-        if map_res and map_res.get("last_active_drawing"):
-            new_draw = map_res["last_active_drawing"]
-            if new_draw and new_draw.get('geometry'):
-                db.reference('map_drawings').push(new_draw)
-                st.rerun()
-    
-    st.markdown('</div>', unsafe_allow_html=True) # סגירת ה-content-card
+    map_res = st_folium(m, height=520, key="V11_FINAL_STABLE", use_container_width=True)
+
+    if map_res and map_res.get("last_active_drawing"):
+        new_draw = map_res["last_active_drawing"]
+        if new_draw and new_draw.get('geometry'):
+            db.reference('map_drawings').push(new_draw)
+            st.rerun()
 
 # --- 6. טבלה וייצוא Excel ---
 if table_rows:
