@@ -56,13 +56,22 @@ def get_teams_from_db():
         return [v for v in ref.values() if v] if isinstance(ref, dict) else [t for t in ref if t]
     except: return []
 
-# פונקציה חדשה למשיכת הודעת ההתראה
 def get_broadcast_msg():
     try:
         return db.reference('broadcast').get() or ""
     except: return ""
 
-# --- 4. עיצוב CSS - המלבן הלבן + תיקון כפתורים ---
+# --- 4. מנגנון ניהול (SuperUser) ---
+if "is_admin" not in st.session_state:
+    st.session_state.is_admin = False
+
+def check_password():
+    if st.session_state.get("password_input") == "Kedem2026":
+        st.session_state.is_admin = True
+    else:
+        st.error("סיסמה שגויה")
+
+# --- 5. עיצוב CSS ---
 logo_base64 = get_image_base64("kedem.png")
 bg_base64 = get_image_base64("kedem1.jpeg")
 bg_style = f"[data-testid='stAppViewContainer'] {{ background-image: url('data:image/png;base64,{bg_base64}'); background-size: cover; background-position: center; background-attachment: fixed; }}" if bg_base64 else ""
@@ -84,7 +93,6 @@ st.markdown(f"""
         margin-bottom: 30px !important;
     }}
 
-    /* עיצוב תיבת ההתראה המתפרצת */
     .broadcast-box {{
         background-color: #fff3cd;
         border: 2px solid #ffeeba;
@@ -110,7 +118,6 @@ st.markdown(f"""
     
     h1, h2, h3, h4, p, span, label {{ color: #1e3d1a !important; font-weight: bold !important; }}
 
-    /* עיצוב כפתורים ותיקון צבע המלל ללבן */
     div.stButton > button {{ 
         width: 100%; border-radius: 12px; font-weight: bold; 
         background-color: #2e5a27; color: #ffffff !important; height: 3.5em; 
@@ -118,7 +125,6 @@ st.markdown(f"""
     }}
     
     div.stButton > button p {{ color: #ffffff !important; }} 
-
     div.stButton > button:hover {{ background-color: #3e7a35; transform: translateY(-1px); }}
 
     .stExpander {{ background-color: white !important; border-radius: 12px !important; border: 1px solid #ddd !important; }}
@@ -134,7 +140,18 @@ st.markdown(f"""
     <div class="footer-credit">נוצר ע"י מתן בוחבוט</div>
     """, unsafe_allow_html=True)
 
-# --- 5. לוגיקה ---
+# --- 6. סרגל צדי לניהול גישה ---
+with st.sidebar:
+    st.markdown("### 🔐 גישת ניהול")
+    if not st.session_state.is_admin:
+        st.text_input("הזן סיסמת חמ\"ל:", type="password", key="password_input", on_change=check_password)
+    else:
+        st.success("מחובר כסופר-יוזר")
+        if st.button("התנתק מהניהול"):
+            st.session_state.is_admin = False
+            st.rerun()
+
+# --- 7. לוגיקה מרכזית ---
 if "lock_refresh" not in st.session_state: st.session_state.lock_refresh = False
 if not st.session_state.lock_refresh:
     st_autorefresh(interval=15000, key="fscounter")
@@ -151,7 +168,6 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# --- הצגת הודעה מתפרצת אם קיימת ---
 broadcast_msg = get_broadcast_msg()
 if broadcast_msg:
     st.markdown(f'<div class="broadcast-box">📢 הודעת חמ"ל: {broadcast_msg}</div>', unsafe_allow_html=True)
@@ -172,29 +188,32 @@ with col1:
                 db.reference(f'teams/{team.get("id")}').update({'lat': loc['coords']['latitude'], 'lon': loc['coords']['longitude'], 'active': True, 'last_seen': now.strftime("%H:%M:%S")})
                 st.rerun()
 
-    with st.expander("🛠️ ניהול חמ\"ל"):
-        # --- חלק ניהול ההודעות החדש ---
-        st.markdown("### 📢 הפצת הודעה")
-        new_msg = st.text_input("הקלד הודעה לכל הצוותים:", value=broadcast_msg)
-        c1, c2 = st.columns(2)
-        if c1.button("📣 שלח"):
-            db.reference('broadcast').set(new_msg)
-            st.rerun()
-        if c2.button("❌ מחק"):
-            db.reference('broadcast').set("")
-            st.rerun()
-        st.markdown("---")
-        
-        st.session_state.lock_refresh = st.checkbox("🔒 נעל רענון (לציור)", value=st.session_state.lock_refresh)
-        if st.button("🗑️ איפוס נתיבי תנועה"):
-            ref = db.reference('teams').get()
-            if ref:
-                for k in (ref.keys() if isinstance(ref, dict) else range(len(ref))):
-                    if ref[k]: db.reference(f'teams/{k}/history').delete()
-            st.rerun()
-        if st.button("🎯 מחק את כל הציורים"):
-            db.reference('map_drawings').delete()
-            st.rerun()
+    # פאנל חמ"ל מופיע רק למנהל
+    if st.session_state.is_admin:
+        with st.expander("🛠️ ניהול חמ\"ל", expanded=True):
+            st.markdown("### 📢 הפצת הודעה")
+            new_msg = st.text_input("הקלד הודעה לכל הצוותים:", value=broadcast_msg)
+            c1, c2 = st.columns(2)
+            if c1.button("📣 שלח"):
+                db.reference('broadcast').set(new_msg)
+                st.rerun()
+            if c2.button("❌ מחק"):
+                db.reference('broadcast').set("")
+                st.rerun()
+            st.markdown("---")
+            
+            st.session_state.lock_refresh = st.checkbox("🔒 נעל רענון (לציור)", value=st.session_state.lock_refresh)
+            if st.button("🗑️ איפוס נתיבי תנועה"):
+                ref = db.reference('teams').get()
+                if ref:
+                    for k in (ref.keys() if isinstance(ref, dict) else range(len(ref))):
+                        if ref[k]: db.reference(f'teams/{k}/history').delete()
+                st.rerun()
+            if st.button("🎯 מחק את כל הציורים"):
+                db.reference('map_drawings').delete()
+                st.rerun()
+    else:
+        st.info("גישה לניהול חמ\"ל חסומה. אנא הזן סיסמה בסרגל הצדי.")
 
 with col2:
     st.subheader("🌍 תמונת מצב")
@@ -213,22 +232,19 @@ with col2:
             if d and 'geometry' in d:
                 folium.GeoJson(d, style_function=lambda x: {'fillColor': 'orange', 'color': 'orange', 'weight': 2}).add_to(m)
 
-    Draw(export=False, draw_options={'polyline':True,'rectangle':True,'polygon':True,'circle':False,'marker':True}, edit_options={'edit': False}).add_to(m)
+    # כלי הציור מופיעים רק למנהל
+    if st.session_state.is_admin:
+        Draw(export=False, draw_options={'polyline':True,'rectangle':True,'polygon':True,'circle':False,'marker':True}, edit_options={'edit': False}).add_to(m)
 
     table_rows = []
     for idx, t in enumerate(teams_data):
         if t.get('active') and 'lat' in t:
             color, emo, icon = get_status_info(t.get('last_seen'), now)
             p_color = PATH_COLORS[idx % len(PATH_COLORS)]
-            
-            # עמודת חברי צוות (נשמר בדיוק כפי שהיה)
             members_list = ", ".join(t.get('members', [])) if t.get('members') else "לא הוזנו"
             table_rows.append({
-                "סטטוס": emo, 
-                "שם הצוות": t.get('name'), 
-                "חברי צוות": members_list,
-                "עדכון אחרון": t.get('last_seen'), 
-                "מיקום": f"{t['lat']:.4f}, {t['lon']:.4f}"
+                "סטטוס": emo, "שם הצוות": t.get('name'), "חברי צוות": members_list,
+                "עדכון אחרון": t.get('last_seen'), "מיקום": f"{t['lat']:.4f}, {t['lon']:.4f}"
             })
             if sel_name == "הצג הכל" or t.get('name') == sel_name:
                 if 'history' in t and isinstance(t['history'], dict):
@@ -236,24 +252,24 @@ with col2:
                     if len(pts) > 1: folium.PolyLine(pts, color=p_color, weight=4, opacity=0.6).add_to(m)
                 folium.Marker([t['lat'], t['lon']], popup=t.get('name'), icon=folium.Icon(color=color, icon=icon, prefix="fa" if icon=="running" else "glyphicon")).add_to(m)
 
-    map_res = st_folium(m, height=520, key="FINAL_BROADCAST_V17", use_container_width=True)
+    map_res = st_folium(m, height=520, key="SUPERUSER_MAP", use_container_width=True)
 
-    if map_res and map_res.get("last_active_drawing"):
+    if st.session_state.is_admin and map_res and map_res.get("last_active_drawing"):
         new_draw = map_res["last_active_drawing"]
         if new_draw and new_draw.get('geometry'):
             db.reference('map_drawings').push(new_draw)
             st.rerun()
 
-# --- 6. טבלה ודוחות ---
+# --- 8. טבלה ודוחות ---
 if table_rows:
     st.markdown("---")
     df = pd.DataFrame(table_rows)
-    
     col_met, col_btn = st.columns([1, 1])
     col_met.metric("צוותים פעילים", len(table_rows))
     
-    # כפתור הורדה לאקסל (נשמר בדיוק כפי שהיה)
-    csv_data = df.to_csv(index=False, encoding='utf-16', sep='\t').encode('utf-16')
-    col_btn.download_button("📥 הורד דוח אקסל", data=csv_data, file_name=f"report_{now.strftime('%H%M')}.csv", mime='text/csv')
+    # כפתור אקסל מופיע רק למנהל
+    if st.session_state.is_admin:
+        csv_data = df.to_csv(index=False, encoding='utf-16', sep='\t').encode('utf-16')
+        col_btn.download_button("📥 הורד דוח אקסל", data=csv_data, file_name=f"report_{now.strftime('%H%M')}.csv", mime='text/csv')
     
     st.dataframe(df, use_container_width=True, hide_index=True)
