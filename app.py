@@ -1,4 +1,5 @@
 import streamlit as st
+import pd as pd
 import pandas as pd
 import folium
 from streamlit_folium import st_folium
@@ -172,6 +173,10 @@ with col2:
         if team.get('active') and 'lat' in team:
             color, emoji, icon_type = get_status_info(team.get('last_seen'), now)
             
+            # שליפת חברי הצוות (חדש)
+            members_list = team.get('members', [])
+            members_str = ", ".join(members_list) if members_list else "אין רשימת חברים"
+            
             # ציור נתיב (היסטוריה)
             if 'history' in team and isinstance(team['history'], dict):
                 points = [[p['lat'], p['lon']] for p in team['history'].values() if 'lat' in p]
@@ -181,14 +186,16 @@ with col2:
             # הוספת סמן למפה
             folium.Marker(
                 [team['lat'], team['lon']],
-                popup=f"<b>{team.get('name')}</b><br>עדכון: {team.get('last_seen')}",
+                popup=f"<b>{team.get('name')}</b><br>חברים: {members_str}<br>עדכון: {team.get('last_seen')}",
                 tooltip=team.get('name'),
                 icon=folium.Icon(color=color, icon=icon_type, prefix="fa" if icon_type=="running" else "glyphicon")
             ).add_to(m)
 
+            # הוספה לטבלה עם עמודת חברי צוות (חדש)
             table_rows.append({
                 "סטטוס": emoji,
                 "שם הצוות": team.get('name'),
+                "חברי צוות": members_str,
                 "עדכון אחרון": team.get('last_seen'),
                 "מיקום": f"{team['lat']:.4f}, {team['lon']:.4f}"
             })
@@ -199,6 +206,11 @@ with col2:
 if table_rows:
     st.markdown("---")
     df = pd.DataFrame(table_rows)
+    
+    # סידור עמודות לטבלה נקייה
+    columns_order = ["סטטוס", "שם הצוות", "חברי צוות", "עדכון אחרון", "מיקום"]
+    df = df[columns_order]
+    
     c1, c2 = st.columns([1, 1])
     c1.metric("צוותים פעילים", len(table_rows))
     
