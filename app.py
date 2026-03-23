@@ -169,12 +169,12 @@ st.markdown(f"""
 
 # --- 5. לוגיקה מרכזית ---
 
-# מניעת רענון בזמן עבודה על המפה
-if "map_lock" not in st.session_state:
-    st.session_state.map_lock = False
+# ניהול רענון חכם - מונע קריסה בזמן רינדור ראשוני של המפה
+if "map_ready" not in st.session_state:
+    st.session_state.map_ready = False
 
-if not st.session_state.map_lock:
-    st_autorefresh(interval=15000, key="fscounter") # הגדלת מרווח ל-15 שניות ליציבות
+# הגדלת מרווח הרענון ל-20 שניות כדי לתת למפה "זמן לנשום"
+st_autorefresh(interval=20000, key="fscounter")
 
 init_firebase()
 
@@ -197,8 +197,8 @@ with col1:
         
         if found_team:
             team_id = found_team.get('id')
-            st.success(f"שלום **{found_team.get('name')}**")
-            auto_up = st.toggle("🛰️ שידור מיקום חי", value=False)
+            st.success(f"זוהה מפקד: **{found_team.get('name')}**")
+            auto_up = st.toggle("🛰️ הפעל שידור חי", value=False)
             if loc and 'coords' in loc:
                 lat, lon = loc['coords']['latitude'], loc['coords']['longitude']
                 if auto_up:
@@ -209,36 +209,32 @@ with col1:
                 elif st.button("📍 עדכן מיקום ידני"):
                     if update_team_in_db(team_id, lat, lon):
                         st.rerun()
-        elif user_code:
-            st.error("❌ קוד שגוי")
 
-    with st.expander("🛠️ ניהול חמ\"ל"):
-        st.session_state.map_lock = st.checkbox("🔒 נעל רענון (לזמן ציור על המפה)", value=st.session_state.map_lock)
-        
+    with st.expander("🛠️ כלי ניהול חמ\"ל"):
         if st.button("🗑️ איפוס נתיבי תנועה"):
             ref = db.reference('teams').get()
             if ref:
-                for key in (ref.keys() if isinstance(ref, dict) else range(len(ref))):
-                    if ref[key]: db.reference(f'teams/{key}/history').delete()
+                for k in (ref.keys() if isinstance(ref, dict) else range(len(ref))):
+                    if ref[k]: db.reference(f'teams/{k}/history').delete()
             st.rerun()
-        
         if st.button("🎯 מחק את כל הציורים"):
             db.reference('map_drawings').delete()
             st.rerun()
 
-# --- מפה (שמאל) ---
+# --- פאנל שמאל (המפה) ---
 with col2:
     st.subheader("🌍 תמונת מצב")
     active_teams = [t for t in teams_data if t.get('active')]
     sel_team = st.selectbox("התמקד בצוות:", ["הצג הכל"] + [t.get('name') for t in active_teams])
 
-    map_center, map_zoom = [31.5, 34.8], 8
+    # הגדרות מיקום המפה
+    m_lat, m_lon, m_zoom = 31.5, 34.8, 8
     if sel_team != "הצג הכל":
         target = next((t for t in active_teams if t.get('name') == sel_team), None)
-        if target: map_center, map_zoom = [target['lat'], target['lon']], 15
+        if target: m_lat, m_lon, m_zoom = target['lat'], target['lon'], 15
 
     # יצירת המפה
-    m = folium.Map(location=map_center, zoom_start=map_zoom, control_scale=True)
+    m = folium.Map(location=[m_lat, m_lon], zoom_start=m_zoom, control_scale=True)
     
     # טעינת ציורים מ-Firebase
     draw_db = db.reference('map_drawings').get()
@@ -246,15 +242,19 @@ with col2:
         for d in draw_db.values():
             folium.GeoJson(d).add_to(m)
 
-    # כלי הציור
-    Draw(export=False, draw_options={'polyline':True,'rectangle':True,'polygon':True,'circle':True,'marker':True}, edit_options={'edit':False}).add_to(m)
+    # הוספת כלי הציור (בגרסה קלה יותר למניעת קריסה)
+    Draw(
+        export=False,
+        draw_options={'polyline':True,'rectangle':True,'polygon':True,'circle':False,'marker':True,'circlemarker':False},
+        edit_options={'edit': False}
+    ).add_to(m)
 
     table_rows = []
     for idx, team in enumerate(teams_data):
         if team.get('active') and 'lat' in team:
             s_color, emoji, i_type = get_status_info(team.get('last_seen'), now)
             p_color = PATH_COLORS[idx % len(PATH_COLORS)]
-            m_str = ", ".join(team.get('members', [])) if team.get('members') else "אין רשימה"
+            m_str = ", ".join(team.get('members', [])) if team.get('members') else "לא הוזנו"
             
             table_rows.append({
                 "סטטוס": emoji, "שם הצוות": team.get('name'), "צבע נתיב": p_color,
@@ -264,17 +264,16 @@ with col2:
             if sel_team == "הצג הכל" or team.get('name') == sel_team:
                 if 'history' in team and isinstance(team['history'], dict):
                     pts = [[p['lat'], p['lon']] for p in team['history'].values() if 'lat' in p]
-                    if len(pts) > 1:
-                        folium.PolyLine(pts, color=p_color, weight=4, opacity=0.6).add_to(m)
-                folium.Marker([team['lat'], team['lon']], popup=team.get('name'), icon=folium.Icon(color=s_color, icon=i_type, prefix="fa" if i_type=="running" else "glyphicon")).add_to(m)
+                    if len(pts) > 1: folium.PolyLine(pts, color=p_color, weight=4, opacity=0.6).add_to(m)
+                folium.Marker([team['lat'], team['lon']], popup=team.get('name'), 
+                              icon=folium.Icon(color=s_color, icon=i_type, prefix="fa" if i_type=="running" else "glyphicon")).add_to(m)
     
-    # הצגת המפה - שימוש ב-Key קבוע לחלוטין ו-use_container_width
-    map_res = st_folium(m, width=None, height=480, key="FINAL_FIX_STABLE_MAP", use_container_width=True)
+    # הצגת המפה - שימוש ב-Key יציב וביטול הגדרות רוחב שמתנגשות עם ה-CSS
+    map_res = st_folium(m, width=None, height=480, key="MAIN_MAP_SYSTEM_V3", use_container_width=True)
 
     if map_res and map_res.get("all_drawings"):
-        all_draws = map_res["all_drawings"]
-        if len(all_draws) > (len(draw_db) if draw_db else 0):
-            db.reference('map_drawings').push(all_draws[-1])
+        if len(map_res["all_drawings"]) > (len(draw_db) if draw_db else 0):
+            db.reference('map_drawings').push(map_res["all_drawings"][-1])
             st.rerun()
 
 # --- 6. טבלה ודוחות ---
