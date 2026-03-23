@@ -105,22 +105,45 @@ st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Assistant:wght@400;700&display=swap');
     {bg_style}
+    
+    /* עיצוב כללי */
     [data-testid="stVerticalBlock"] {{
         background-color: rgba(255, 255, 255, 0.92);
-        padding: 20px;
+        padding: 15px;
         border-radius: 15px;
         box-shadow: 0 4px 15px rgba(0,0,0,0.2);
     }}
+    
     html, body, [data-testid="stSidebar"], .stMarkdown {{
         direction: rtl;
         text-align: right;
         font-family: 'Assistant', sans-serif;
     }}
+
+    /* תיקון לניידים - מניעת "ציפה" של תפריטים */
+    @media (max-width: 768px) {{
+        [data-testid="stSidebar"] {{
+            width: 100% !important;
+        }}
+        /* הסתרת כפתור ה-Deploy והתפריטים המובנים של Streamlit שמפריעים בנייד */
+        .stDeployButton {{display:none;}}
+        #MainMenu {{visibility: hidden;}}
+        header {{visibility: hidden;}}
+        footer {{visibility: hidden;}}
+        
+        /* צמצום רווחים בנייד */
+        [data-testid="stVerticalBlock"] {{
+            padding: 10px;
+        }}
+    }}
+
     div.stButton > button {{ 
         width: 100%; border-radius: 10px; font-weight: bold; 
         background-color: #2e5a27; color: white; height: 3em;
     }}
-    #MainMenu, footer, header {{visibility: hidden;}}
+    
+    /* הסתרת אלמנטים מיותרים */
+    header, footer {{visibility: hidden;}}
     </style>
     """, unsafe_allow_html=True)
 
@@ -131,67 +154,61 @@ init_firebase()
 
 # כותרת
 if logo_base64:
-    st.markdown(f'<div style="text-align: center;"><img src="data:image/png;base64,{logo_base64}" width="100"></div>', unsafe_allow_html=True)
-st.markdown("<h1 style='text-align: center;'>מערכת שבצ''קדם - ניהול כוחות</h1>", unsafe_allow_html=True)
+    st.markdown(f'<div style="text-align: center;"><img src="data:image/png;base64,{logo_base64}" width="80"></div>', unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center; font-size: 1.8rem;'>מערכת שבצ''קדם</h1>", unsafe_allow_html=True)
 
 teams_data = get_teams_from_db()
-
-# --- המיקום בגרסה היציבה ---
 loc = get_geolocation()
-
 now = datetime.now(ISRAEL_TZ)
 
+# בנייד הטורים יהיו אחד מתחת לשני אוטומטית ב-Streamlit
 col1, col2 = st.columns([1, 2])
 
-# --- פאנל דיווח וניהול (צד ימין) ---
+# --- פאנל דיווח וניהול (צד ימין / עליון בנייד) ---
 with col1:
-    st.subheader("📲 דיווח מפקדים")
-    user_code = st.text_input("הכנס קוד מפקד:", type="password")
-    found_team = next((t for t in teams_data if str(t.get('code')) == user_code), None)
-    
-    if found_team:
-        team_id = found_team.get('id')
-        st.success(f"שלום מפקד {found_team.get('name')}")
-        auto_up = st.toggle("🛰️ שידור מיקום חי", value=False, key="auto_up")
+    with st.expander("📲 דיווח מפקדים", expanded=True):
+        user_code = st.text_input("הכנס קוד מפקד:", type="password")
+        found_team = next((t for t in teams_data if str(t.get('code')) == user_code), None)
         
-        if loc and 'coords' in loc:
-            lat, lon = loc['coords']['latitude'], loc['coords']['longitude']
-            if auto_up:
-                # החזרת הלוגיקה המלאה: בדיקת שינוי מיקום לפני עדכון
-                last_lat = st.session_state.get('last_lat_sent', 0)
-                if abs(last_lat - lat) > 0.00001: # דיוק גבוה יותר (בערך 1 מטר)
-                    if update_team_in_db(team_id, lat, lon):
-                        st.session_state.last_lat_sent = lat
-                st.info("🛰️ שידור חי פעיל - וודא מסך דולק")
-            elif st.button("📍 עדכן מיקום ידני"):
-                update_team_in_db(team_id, lat, lon)
-                st.rerun()
-    elif user_code:
-        st.error("❌ קוד שגוי")
+        if found_team:
+            team_id = found_team.get('id')
+            st.success(f"שלום מפקד {found_team.get('name')}")
+            auto_up = st.toggle("🛰️ שידור מיקום חי", value=False, key="auto_up")
+            
+            if loc and 'coords' in loc:
+                lat, lon = loc['coords']['latitude'], loc['coords']['longitude']
+                if auto_up:
+                    last_lat = st.session_state.get('last_lat_sent', 0)
+                    if abs(last_lat - lat) > 0.00001:
+                        if update_team_in_db(team_id, lat, lon):
+                            st.session_state.last_lat_sent = lat
+                    st.info("🛰️ שידור חי פעיל")
+                elif st.button("📍 עדכן מיקום ידני"):
+                    update_team_in_db(team_id, lat, lon)
+                    st.rerun()
+        elif user_code:
+            st.error("❌ קוד שגוי")
 
-    # --- ניהול חמ"ל (מחיקת היסטוריה) ---
-    st.markdown("---")
-    st.subheader("🛠️ ניהול חמ\"ל")
-    if st.button("🗑️ נקה מסלולי תנועה (איפוס נתיבים)"):
-        try:
-            ref = db.reference('teams')
-            all_teams = ref.get()
-            if all_teams:
-                for key in (all_teams.keys() if isinstance(all_teams, dict) else range(len(all_teams))):
-                    if all_teams[key]:
-                        db.reference(f'teams/{key}/history').delete()
-                st.toast("הנתיבים נוקו בהצלחה!", icon="🧹")
-                st.rerun()
-        except Exception as e:
-            st.error(f"שגיאה בניקוי: {e}")
+    # --- ניהול חמ"ל (בתוך Expander כדי לחסוך מקום בנייד) ---
+    with st.expander("🛠️ ניהול חמ\"ל"):
+        if st.button("🗑️ נקה מסלולי תנועה"):
+            try:
+                ref = db.reference('teams')
+                all_teams = ref.get()
+                if all_teams:
+                    for key in (all_teams.keys() if isinstance(all_teams, dict) else range(len(all_teams))):
+                        if all_teams[key]:
+                            db.reference(f'teams/{key}/history').delete()
+                    st.toast("הנתיבים נוקו!")
+                    st.rerun()
+            except Exception as e:
+                st.error(f"שגיאה: {e}")
 
-# --- מפה וסינון (צד שמאל) ---
+# --- מפה וסינון (צד שמאל / תחתון בנייד) ---
 with col2:
-    st.subheader("🌍 מפת כוחות")
-    
     active_teams = [t for t in teams_data if t.get('active')]
     team_options = ["הצג את כל הצוותים"] + [t.get('name') for t in active_teams]
-    selected_team = st.selectbox("התמקד בצוות ספציפי:", team_options)
+    selected_team = st.selectbox("התמקד בצוות:", team_options)
 
     map_center = [31.5, 34.8]
     map_zoom = 8
@@ -213,41 +230,35 @@ with col2:
             status_color, emoji, icon_type = get_status_info(team.get('last_seen'), now)
             path_color = PATH_COLORS[idx % len(PATH_COLORS)]
             members_list = team.get('members', [])
-            members_str = ", ".join(members_list) if members_list else "אין רשימת חברים"
+            members_str = ", ".join(members_list) if members_list else "אין חברים"
             
             if 'history' in team and isinstance(team['history'], dict):
                 points = [[p['lat'], p['lon']] for p in team['history'].values() if 'lat' in p]
                 if len(points) > 1:
-                    folium.PolyLine(
-                        points, color=path_color, weight=4, opacity=0.7, 
-                        tooltip=f"מסלול: {team.get('name')}"
-                    ).add_to(m)
+                    folium.PolyLine(points, color=path_color, weight=4, opacity=0.7).add_to(m)
 
             folium.Marker(
                 [team['lat'], team['lon']],
-                popup=f"<b>{team.get('name')}</b><br>חברים: {members_str}<br>עדכון: {team.get('last_seen')}",
-                tooltip=f"{team.get('name')} (נתיב ב-{path_color})",
+                popup=f"<b>{team.get('name')}</b><br>חברים: {members_str}",
+                tooltip=team.get('name'),
                 icon=folium.Icon(color=status_color, icon=icon_type, prefix="fa" if icon_type=="running" else "glyphicon")
             ).add_to(m)
 
             table_rows.append({
-                "סטטוס": emoji, "שם הצוות": team.get('name'), "צבע נתיב": path_color,
-                "חברי צוות": members_str, "עדכון אחרון": team.get('last_seen'),
+                "סטטוס": emoji, "שם": team.get('name'), "צבע": path_color,
+                "חברים": members_str, "עדכון": team.get('last_seen'),
                 "מיקום": f"{team['lat']:.4f}, {team['lon']:.4f}"
             })
     
-    st_folium(m, width="100%", height=450, key=f"main_map_{selected_team}")
+    st_folium(m, width="100%", height=400, key=f"main_map_{selected_team}")
 
 # --- 6. טבלה ודוחות ---
 if table_rows:
     st.markdown("---")
     df = pd.DataFrame(table_rows)
-    columns_order = ["סטטוס", "שם הצוות", "צבע נתיב", "חברי צוות", "עדכון אחרון", "מיקום"]
-    df = df[columns_order]
-    
     c1, c2 = st.columns([1, 1])
     c1.metric("צוותים פעילים", len(table_rows))
     
     csv = df.to_csv(index=False, encoding='utf-16', sep='\t').encode('utf-16')
-    c2.download_button('📥 הורד דוח אקסל', csv, f"report_{now.strftime('%H%M')}.csv", 'text/csv')
+    c2.download_button('📥 דוח אקסל', csv, f"report_{now.strftime('%H%M')}.csv", 'text/csv')
     st.dataframe(df, use_container_width=True, hide_index=True)
