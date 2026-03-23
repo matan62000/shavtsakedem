@@ -92,7 +92,7 @@ def update_team_in_db(team_id, lat, lon):
     except Exception:
         return False
 
-# --- 4. עיצוב ו-UI (CSS המלא) ---
+# --- 4. עיצוב ו-UI (CSS המורחב) ---
 
 logo_base64 = get_image_base64("kedem.png")
 bg_base64 = get_image_base64("kedem1.jpeg")
@@ -170,7 +170,13 @@ st.markdown(f"""
 
 # --- 5. לוגיקה מרכזית של האפליקציה ---
 
-st_autorefresh(interval=10000, key="fscounter")
+# מניעת רענון בזמן ציור כדי למנוע "מסך לבן"
+if "lock_refresh" not in st.session_state:
+    st.session_state.lock_refresh = False
+
+if not st.session_state.lock_refresh:
+    st_autorefresh(interval=10000, key="fscounter")
+
 init_firebase()
 
 # כותרת ולוגו
@@ -258,7 +264,7 @@ with col2:
 
     m = folium.Map(location=map_center, zoom_start=map_zoom)
 
-    # 1. טעינת ציורים מ-Firebase (בדיקה למניעת קריסה)
+    # 1. טעינת ציורים מ-Firebase
     draw_ref = None
     try:
         draw_ref = db.reference('map_drawings').get()
@@ -281,14 +287,14 @@ with col2:
 
     # 3. לולאה להוספת צוותים למפה ובניית הטבלה המלאה
     for idx, team in enumerate(teams_data):
-        # תמיד בונים את נתוני הטבלה לכל הצוותים הפעילים
+        # בניית נתוני הטבלה לכל הצוותים הפעילים
         if team.get('active') and 'lat' in team:
             status_color, emoji, icon_type = get_status_info(team.get('last_seen'), now)
             path_color = PATH_COLORS[idx % len(PATH_COLORS)]
             members_list = team.get('members', [])
             members_str = ", ".join(members_list) if members_list else "אין רשימת חברים"
             
-            # הוספה לטבלה המלאה (לדוח וגם לתצוגה)
+            # הוספה לטבלה (מופיע תמיד בדוח)
             table_rows.append({
                 "סטטוס": emoji,
                 "שם הצוות": team.get('name'),
@@ -298,9 +304,8 @@ with col2:
                 "מיקום": f"{team['lat']:.4f}, {team['lon']:.4f}"
             })
 
-            # ציור על המפה רק לפי הסינון הנבחר
+            # ציור על המפה רק לפי הסינון
             if selected_team == "הצג את כל הצוותים" or team.get('name') == selected_team:
-                # ציור נתיב (היסטוריה)
                 if 'history' in team and isinstance(team['history'], dict):
                     points = [[p['lat'], p['lon']] for p in team['history'].values() if 'lat' in p]
                     if len(points) > 1:
@@ -309,7 +314,6 @@ with col2:
                             tooltip=f"מסלול: {team.get('name')}"
                         ).add_to(m)
 
-                # הוספת סמן
                 folium.Marker(
                     [team['lat'], team['lon']],
                     popup=f"<b>{team.get('name')}</b><br>חברים: {members_str}<br>עדכון: {team.get('last_seen')}",
@@ -317,39 +321,45 @@ with col2:
                     icon=folium.Icon(color=status_color, icon=icon_type, prefix="fa" if icon_type=="running" else "glyphicon")
                 ).add_to(m)
     
-    # תצוגת המפה עם Key קבוע ליציבות
-    output = st_folium(m, width="100%", height=450, key="main_map_stable")
+    # הצגת המפה עם מנגנון יציבות (Key קבוע)
+    output = st_folium(m, width="100%", height=450, key="main_map_fixed")
 
-    # שמירת ציור חדש ל-Firebase רק אם נוצר אחד כזה
+    # בדיקה ושמירה של ציור חדש
     if output and output.get("all_drawings"):
         all_draws = output["all_drawings"]
         existing_count = len(draw_ref) if draw_ref else 0
         if len(all_draws) > existing_count:
             try:
+                # מניעת רענון בזמן הכתיבה ל-DB
+                st.session_state.lock_refresh = True
                 db.reference('map_drawings').push(all_draws[-1])
+                st.session_state.lock_refresh = False
                 st.rerun()
             except:
                 pass
 
-# --- 6. טבלה ודוחות (הגרסה המלאה) ---
+# --- 6. טבלה ודוחות (הגרסה המלאה ללא חיתוך) ---
 if table_rows:
     st.markdown("---")
     df = pd.DataFrame(table_rows)
     
-    # סידור עמודות לטבלה המקורית
+    # וידוא סידור עמודות מלא
     columns_order = ["סטטוס", "שם הצוות", "צבע נתיב", "חברי צוות", "עדכון אחרון", "מיקום"]
     df = df[columns_order]
     
     c_met, c_down = st.columns([1, 1])
     c_met.metric("צוותים פעילים", len(table_rows))
     
-    # הורדת דוח CSV בתצורת אקסל
-    csv = df.to_csv(index=False, encoding='utf-16', sep='\t').encode('utf-16')
+    # יצירת דוח CSV תואם אקסל (UTF-16)
+    csv_data = df.to_csv(index=False, encoding='utf-16', sep='\t').encode('utf-16')
     c_down.download_button(
         label='📥 הורד דוח אקסל (CSV)',
-        data=csv,
+        data=csv_data,
         file_name=f"shavtsakedem_report_{now.strftime('%d%m_%H%M')}.csv",
         mime='text/csv',
     )
     
+    # הצגת הטבלה בעיצוב רחב
     st.dataframe(df, use_container_width=True, hide_index=True)
+
+# סוף הקוד
