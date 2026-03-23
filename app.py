@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import pandas as pd
 import folium
 from streamlit_folium import st_folium
 from streamlit_js_eval import get_geolocation
@@ -138,7 +137,7 @@ now = datetime.now(ISRAEL_TZ)
 
 col1, col2 = st.columns([1, 2])
 
-# --- פאנל דיווח (צד ימין) ---
+# --- פאנל דיווח וניהול (צד ימין) ---
 with col1:
     st.subheader("📲 דיווח מפקדים")
     user_code = st.text_input("הכנס קוד מפקד:", type="password")
@@ -163,17 +162,53 @@ with col1:
     elif user_code:
         st.error("❌ קוד שגוי")
 
-# --- מפה (צד שמאל) ---
+    # --- חדש: ניהול חמ"ל (מחיקת היסטוריה) ---
+    st.markdown("---")
+    st.subheader("🛠️ ניהול חמ\"ל")
+    if st.button("🗑️ נקה מסלולי תנועה (איפוס נתיבים)"):
+        try:
+            ref = db.reference('teams')
+            all_teams = ref.get()
+            if all_teams:
+                # מחיקת ה-history לכל צוות בנפרד
+                for key in (all_teams.keys() if isinstance(all_teams, dict) else range(len(all_teams))):
+                    if all_teams[key]:
+                        db.reference(f'teams/{key}/history').delete()
+                st.toast("הנתיבים נוקו בהצלחה!", icon="🧹")
+                st.rerun()
+        except Exception as e:
+            st.error(f"שגיאה בניקוי: {e}")
+
+# --- מפה וסינון (צד שמאל) ---
 with col2:
     st.subheader("🌍 מפת כוחות")
-    m = folium.Map(location=[31.5, 34.8], zoom_start=8)
+    
+    # --- חדש: תיבת סינון צוותים ---
+    active_teams = [t for t in teams_data if t.get('active')]
+    team_options = ["הצג את כל הצוותים"] + [t.get('name') for t in active_teams]
+    selected_team = st.selectbox("התמקד בצוות ספציפי:", team_options)
+
+    # הגדרת מיקום התחלתי למפה
+    map_center = [31.5, 34.8]
+    map_zoom = 8
+
+    # אם נבחר צוות, המפה תשתגר אליו
+    if selected_team != "הצג את כל הצוותים":
+        target = next((t for t in active_teams if t.get('name') == selected_team), None)
+        if target and 'lat' in target:
+            map_center = [target['lat'], target['lon']]
+            map_zoom = 15
+
+    m = folium.Map(location=map_center, zoom_start=map_zoom)
     table_rows = []
 
     for team in teams_data:
+        # פילטר ויזואלי למפה
+        if selected_team != "הצג את כל הצוותים" and team.get('name') != selected_team:
+            continue
+
         if team.get('active') and 'lat' in team:
             color, emoji, icon_type = get_status_info(team.get('last_seen'), now)
-            
-            # שליפת חברי הצוות (חדש)
             members_list = team.get('members', [])
             members_str = ", ".join(members_list) if members_list else "אין רשימת חברים"
             
@@ -191,7 +226,7 @@ with col2:
                 icon=folium.Icon(color=color, icon=icon_type, prefix="fa" if icon_type=="running" else "glyphicon")
             ).add_to(m)
 
-            # הוספה לטבלה עם עמודת חברי צוות (חדש)
+            # הוספה לטבלה
             table_rows.append({
                 "סטטוס": emoji,
                 "שם הצוות": team.get('name'),
@@ -200,14 +235,13 @@ with col2:
                 "מיקום": f"{team['lat']:.4f}, {team['lon']:.4f}"
             })
     
-    st_folium(m, width="100%", height=450, key="main_map")
+    # שימוש ב-selected_team כחלק מה-key כדי להכריח את המפה להתרענן בשינוי סינון
+    st_folium(m, width="100%", height=450, key=f"main_map_{selected_team}")
 
 # --- 6. טבלה ודוחות ---
 if table_rows:
     st.markdown("---")
     df = pd.DataFrame(table_rows)
-    
-    # סידור עמודות לטבלה נקייה
     columns_order = ["סטטוס", "שם הצוות", "חברי צוות", "עדכון אחרון", "מיקום"]
     df = df[columns_order]
     
