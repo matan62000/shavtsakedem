@@ -56,7 +56,7 @@ def get_teams_from_db():
         return [v for v in ref.values() if v] if isinstance(ref, dict) else [t for t in ref if t]
     except: return []
 
-# --- 4. עיצוב CSS - הפתרון הסופי למלבן הלבן ---
+# --- 4. עיצוב CSS - המלבן הלבן + תיקון כפתורים ---
 logo_base64 = get_image_base64("kedem.png")
 bg_base64 = get_image_base64("kedem1.jpeg")
 bg_style = f"[data-testid='stAppViewContainer'] {{ background-image: url('data:image/png;base64,{bg_base64}'); background-size: cover; background-position: center; background-attachment: fixed; }}" if bg_base64 else ""
@@ -66,44 +66,41 @@ st.markdown(f"""
     @import url('https://fonts.googleapis.com/css2?family=Assistant:wght@400;700&display=swap');
     {bg_style}
     
-    /* יצירת שכבת כיסוי לבנה על כל אזור התוכן */
-    .stApp {{
-        background-color: rgba(255, 255, 255, 0.4) !important; /* שכבה דקה על הכל */
-    }}
+    .stApp {{ background-color: rgba(255, 255, 255, 0.4) !important; }}
 
-    /* המלבן הלבן הראשי - הגדרה אגרסיבית */
     [data-testid="stMainBlockContainer"] {{
-        background-color: rgba(255, 255, 255, 0.95) !important;
-        backdrop-filter: blur(10px);
+        background-color: rgba(255, 255, 255, 0.96) !important;
+        backdrop-filter: blur(12px);
         padding: 40px !important;
-        border-radius: 25px !important;
+        border-radius: 30px !important;
         box-shadow: 0 20px 60px rgba(0,0,0,0.5) !important;
         margin-top: 30px !important;
         margin-bottom: 30px !important;
-        border: 1px solid rgba(255,255,255,0.3);
     }}
 
-    /* ביטול רווחים מיותרים למעלה */
-    [data-testid="stHeader"] {{ background: transparent !important; }}
-    
     html, body, [data-testid="stSidebar"], .stMarkdown {{ 
         direction: rtl; text-align: right; font-family: 'Assistant', sans-serif; color: #1e3d1a !important; 
     }}
     
-    /* כותרות כהות לקריאות מקסימלית */
     h1, h2, h3, h4, p, span, label {{ color: #1e3d1a !important; font-weight: bold !important; }}
 
+    /* עיצוב כפתורים ותיקון צבע המלל ללבן */
     div.stButton > button {{ 
         width: 100%; border-radius: 12px; font-weight: bold; 
-        background-color: #2e5a27; color: white !important; height: 3.5em; 
+        background-color: #2e5a27; color: #ffffff !important; height: 3.5em; 
+        border: none; transition: 0.3s;
     }}
     
+    div.stButton > button p {{ color: #ffffff !important; }} /* תיקון ספציפי לטקסט פנימי */
+
+    div.stButton > button:hover {{ background-color: #3e7a35; transform: translateY(-1px); }}
+
     .stExpander {{ background-color: white !important; border-radius: 12px !important; border: 1px solid #ddd !important; }}
     
     .footer-credit {{ 
         position: fixed; left: 15px; bottom: 15px; font-size: 0.75rem; 
-        color: white; background-color: rgba(0,0,0,0.5); 
-        padding: 4px 10px; border-radius: 8px; z-index: 100; 
+        color: white; background-color: rgba(0,0,0,0.6); 
+        padding: 4px 12px; border-radius: 8px; z-index: 100; 
     }}
     
     header, footer {{visibility: hidden;}}
@@ -118,7 +115,6 @@ if not st.session_state.lock_refresh:
 
 init_firebase()
 
-# לוגו וכותרת
 if logo_base64: 
     st.markdown(f'<div style="text-align: center;"><img src="data:image/png;base64,{logo_base64}" width="100"></div>', unsafe_allow_html=True)
 
@@ -147,7 +143,7 @@ with col1:
 
     with st.expander("🛠️ ניהול חמ\"ל"):
         st.session_state.lock_refresh = st.checkbox("🔒 נעל רענון (לציור)", value=st.session_state.lock_refresh)
-        if st.button("🗑️ איפוס נתיבים"):
+        if st.button("🗑️ איפוס נתיבי תנועה"):
             ref = db.reference('teams').get()
             if ref:
                 for k in (ref.keys() if isinstance(ref, dict) else range(len(ref))):
@@ -181,14 +177,22 @@ with col2:
         if t.get('active') and 'lat' in t:
             color, emo, icon = get_status_info(t.get('last_seen'), now)
             p_color = PATH_COLORS[idx % len(PATH_COLORS)]
-            table_rows.append({"סטטוס": emo, "שם הצוות": t.get('name'), "עדכון": t.get('last_seen'), "מיקום": f"{t['lat']:.4f}, {t['lon']:.4f}"})
+            # הוספת חברי צוות לטבלה
+            members_list = ", ".join(t.get('members', [])) if t.get('members') else "לא הוזנו"
+            table_rows.append({
+                "סטטוס": emo, 
+                "שם הצוות": t.get('name'), 
+                "חברי צוות": members_list,
+                "עדכון אחרון": t.get('last_seen'), 
+                "מיקום": f"{t['lat']:.4f}, {t['lon']:.4f}"
+            })
             if sel_name == "הצג הכל" or t.get('name') == sel_name:
                 if 'history' in t and isinstance(t['history'], dict):
                     pts = [[p['lat'], p['lon']] for p in t['history'].values() if 'lat' in p]
                     if len(pts) > 1: folium.PolyLine(pts, color=p_color, weight=4, opacity=0.6).add_to(m)
                 folium.Marker([t['lat'], t['lon']], popup=t.get('name'), icon=folium.Icon(color=color, icon=icon, prefix="fa" if icon=="running" else "glyphicon")).add_to(m)
 
-    map_res = st_folium(m, height=520, key="FINAL_FIX_V15", use_container_width=True)
+    map_res = st_folium(m, height=520, key="FINAL_FIX_V16", use_container_width=True)
 
     if map_res and map_res.get("last_active_drawing"):
         new_draw = map_res["last_active_drawing"]
@@ -196,9 +200,16 @@ with col2:
             db.reference('map_drawings').push(new_draw)
             st.rerun()
 
-# --- 6. טבלה ---
+# --- 6. טבלה ודוחות ---
 if table_rows:
     st.markdown("---")
     df = pd.DataFrame(table_rows)
-    st.metric("צוותים פעילים", len(table_rows))
+    
+    col_met, col_btn = st.columns([1, 1])
+    col_met.metric("צוותים פעילים", len(table_rows))
+    
+    # כפתור הורדה לאקסל
+    csv_data = df.to_csv(index=False, encoding='utf-16', sep='\t').encode('utf-16')
+    col_btn.download_button("📥 הורד דוח אקסל", data=csv_data, file_name=f"report_{now.strftime('%H%M')}.csv", mime='text/csv')
+    
     st.dataframe(df, use_container_width=True, hide_index=True)
