@@ -136,8 +136,8 @@ st.markdown("<h1 style='text-align: center;'>מערכת שבצ''קדם - ניה�
 
 teams_data = get_teams_from_db()
 
-# --- שיפור דיוק המיקום: עדכון כל 5 שניות ודיוק גבוה ---
-loc = get_geolocation(component_key="geo", update_interval=5000)
+# --- המיקום בגרסה היציבה ---
+loc = get_geolocation()
 
 now = datetime.now(ISRAEL_TZ)
 
@@ -157,10 +157,12 @@ with col1:
         if loc and 'coords' in loc:
             lat, lon = loc['coords']['latitude'], loc['coords']['longitude']
             if auto_up:
-                # שידור חי רציף (הסרת בדיקת abs_lat לטובת אמינות בנסיעה)
-                if update_team_in_db(team_id, lat, lon):
-                    st.session_state.last_lat_sent = lat
-                st.info("🛰️ שידור חי פעיל - וודא שהמסך נשאר דולק")
+                # החזרת הלוגיקה המלאה: בדיקת שינוי מיקום לפני עדכון
+                last_lat = st.session_state.get('last_lat_sent', 0)
+                if abs(last_lat - lat) > 0.00001: # דיוק גבוה יותר (בערך 1 מטר)
+                    if update_team_in_db(team_id, lat, lon):
+                        st.session_state.last_lat_sent = lat
+                st.info("🛰️ שידור חי פעיל - וודא מסך דולק")
             elif st.button("📍 עדכן מיקום ידני"):
                 update_team_in_db(team_id, lat, lon)
                 st.rerun()
@@ -203,33 +205,24 @@ with col2:
     m = folium.Map(location=map_center, zoom_start=map_zoom)
     table_rows = []
 
-    # לולאה להוספת צוותים למפה
     for idx, team in enumerate(teams_data):
         if selected_team != "הצג את כל הצוותים" and team.get('name') != selected_team:
             continue
 
         if team.get('active') and 'lat' in team:
             status_color, emoji, icon_type = get_status_info(team.get('last_seen'), now)
-            
-            # בחירת צבע נתיב ייחודי לצוות
             path_color = PATH_COLORS[idx % len(PATH_COLORS)]
-            
             members_list = team.get('members', [])
             members_str = ", ".join(members_list) if members_list else "אין רשימת חברים"
             
-            # ציור נתיב (היסטוריה) עם צבע ייחודי
             if 'history' in team and isinstance(team['history'], dict):
                 points = [[p['lat'], p['lon']] for p in team['history'].values() if 'lat' in p]
                 if len(points) > 1:
                     folium.PolyLine(
-                        points, 
-                        color=path_color, 
-                        weight=4, 
-                        opacity=0.7, 
+                        points, color=path_color, weight=4, opacity=0.7, 
                         tooltip=f"מסלול: {team.get('name')}"
                     ).add_to(m)
 
-            # הוספת סמן למפה
             folium.Marker(
                 [team['lat'], team['lon']],
                 popup=f"<b>{team.get('name')}</b><br>חברים: {members_str}<br>עדכון: {team.get('last_seen')}",
@@ -238,11 +231,8 @@ with col2:
             ).add_to(m)
 
             table_rows.append({
-                "סטטוס": emoji,
-                "שם הצוות": team.get('name'),
-                "צבע נתיב": path_color,
-                "חברי צוות": members_str,
-                "עדכון אחרון": team.get('last_seen'),
+                "סטטוס": emoji, "שם הצוות": team.get('name'), "צבע נתיב": path_color,
+                "חברי צוות": members_str, "עדכון אחרון": team.get('last_seen'),
                 "מיקום": f"{team['lat']:.4f}, {team['lon']:.4f}"
             })
     
