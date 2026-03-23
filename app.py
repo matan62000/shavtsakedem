@@ -157,7 +157,14 @@ init_firebase()
 # כותרת
 if logo_base64:
     st.markdown(f'<div style="text-align: center;"><img src="data:image/png;base64,{logo_base64}" width="80"></div>', unsafe_allow_html=True)
-st.markdown("<h1 style='text-align: center; font-size: 1.8rem;'>מערכת שבצ''קדם</h1>", unsafe_allow_html=True)
+
+# כותרת המערכת וקרדיט צמוד מתחתיה
+st.markdown("""
+    <div style="text-align: center;">
+        <h1 style='margin-bottom: 0; font-size: 1.8rem;'>מערכת שבצ''קדם</h1>
+        <p style='color: grey; font-size: 0.8rem; margin-top: 0;'>נוצר ע"י מתן בוחבוט</p>
+    </div>
+    """, unsafe_allow_html=True)
 
 teams_data = get_teams_from_db()
 loc = get_geolocation()
