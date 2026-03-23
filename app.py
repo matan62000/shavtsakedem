@@ -56,16 +56,7 @@ def get_teams_from_db():
         return [v for v in ref.values() if v] if isinstance(ref, dict) else [t for t in ref if t]
     except: return []
 
-def update_team_in_db(team_id, lat, lon):
-    try:
-        current_time = datetime.now(ISRAEL_TZ).strftime("%H:%M:%S")
-        ref = db.reference(f'teams/{team_id}')
-        ref.update({'lat': lat, 'lon': lon, 'active': True, 'last_seen': current_time})
-        ref.child('history').push({'lat': lat, 'lon': lon, 'time': current_time})
-        return True
-    except: return False
-
-# --- 4. עיצוב CSS ---
+# --- 4. עיצוב CSS המלא ---
 logo_base64 = get_image_base64("kedem.png")
 bg_base64 = get_image_base64("kedem1.jpeg")
 bg_style = f"[data-testid='stAppViewContainer'] {{ background-image: url('data:image/png;base64,{bg_base64}'); background-size: cover; background-position: center; background-attachment: fixed; }}" if bg_base64 else ""
@@ -77,29 +68,18 @@ st.markdown(f"""
     [data-testid="stVerticalBlock"] {{ background-color: rgba(255, 255, 255, 0.92); padding: 20px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }}
     html, body, [data-testid="stSidebar"], .stMarkdown {{ direction: rtl; text-align: right; font-family: 'Assistant', sans-serif; }}
     div.stButton > button {{ width: 100%; border-radius: 10px; font-weight: bold; background-color: #2e5a27; color: white; height: 3.5em; transition: 0.3s; }}
-    iframe {{ min-height: 500px !important; }}
-    .footer-credit {{ position: fixed; left: 15px; bottom: 15px; font-size: 0.7rem; color: rgba(0,0,0,0.5); z-index: 100; }}
+    iframe {{ min-height: 520px !important; border-radius: 10px; }}
     header, footer {{visibility: hidden;}}
     </style>
-    <div class="footer-credit">נוצר ע"י מתן בוחבוט</div>
     """, unsafe_allow_html=True)
 
 # --- 5. לוגיקה וניהול רענון ---
-if "edit_mode" not in st.session_state: st.session_state.edit_mode = False
-
-# רענון אוטומטי - נעצר במצב עריכה
-if not st.session_state.edit_mode:
+if "lock_refresh" not in st.session_state: st.session_state.lock_refresh = False
+if not st.session_state.lock_refresh:
     st_autorefresh(interval=15000, key="fscounter")
 
 init_firebase()
 if logo_base64: st.markdown(f'<div style="text-align: center;"><img src="data:image/png;base64,{logo_base64}" width="85"></div>', unsafe_allow_html=True)
-
-st.markdown("""
-<div style='text-align: center;'>
-    <h1 style='margin-bottom: 0; font-size: 2rem; color: #1e3d1a;'>מערכת שבצ'קדם</h1>
-    <p style='color: #4a4a4a; font-size: 0.9rem; margin-top: 0; font-weight: bold;'>ניהול ושליטה בכוחות - מתן בוחבוט</p>
-</div>
-""", unsafe_allow_html=True)
 
 teams_data = get_teams_from_db()
 loc = get_geolocation()
@@ -110,16 +90,14 @@ col1, col2 = st.columns([1, 2])
 with col1:
     with st.expander("📲 פאנל דיווח מפקדים", expanded=True):
         u_code = st.text_input("קוד מפקד:", type="password")
-        team = next((t for t in teams_data if str(t.get('code')) == user_code), None) if 'user_code' in locals() else next((t for t in teams_data if str(t.get('code')) == u_code), None)
-        if team:
-            st.success(f"שלום {team.get('name')}")
-            if loc and 'coords' in loc:
-                if st.button("📍 עדכן מיקום עכשיו"):
-                    update_team_in_db(team.get('id'), loc['coords']['latitude'], loc['coords']['longitude'])
-                    st.rerun()
+        team = next((t for t in teams_data if str(t.get('code')) == u_code), None)
+        if team and loc and 'coords' in loc:
+            if st.button("📍 עדכן מיקום עכשיו"):
+                db.reference(f'teams/{team.get("id")}').update({'lat': loc['coords']['latitude'], 'lon': loc['coords']['longitude'], 'active': True, 'last_seen': now.strftime("%H:%M:%S")})
+                st.rerun()
 
     with st.expander("🛠️ ניהול חמ\"ל"):
-        st.session_state.edit_mode = st.toggle("🎨 מצב ציור/עריכת מפה", value=st.session_state.edit_mode)
+        st.session_state.lock_refresh = st.checkbox("🔒 נעל רענון (לציור)", value=st.session_state.lock_refresh)
         if st.button("🗑️ איפוס נתיבים"):
             ref = db.reference('teams').get()
             if ref:
@@ -142,57 +120,46 @@ with col2:
 
     m = folium.Map(location=[m_lat, m_lon], zoom_start=m_zoom, control_scale=True)
     
+    # טעינת ציורים עם הגנה משופרת
     draw_db = db.reference('map_drawings').get()
     if draw_db:
         for d in draw_db.values():
-            try: folium.GeoJson(d).add_to(m)
+            try:
+                # מוודא שהציור לא ריק לפני הוספה
+                if d and 'geometry' in d:
+                    folium.GeoJson(d, style_function=lambda x: {'fillColor': 'orange', 'color': 'orange', 'weight': 2}).add_to(m)
             except: continue
 
-    if st.session_state.edit_mode:
-        Draw(export=False, draw_options={'polyline':True,'rectangle':True,'polygon':True,'circle':False,'marker':True}, edit_options={'edit': False}).add_to(m)
+    Draw(export=False, draw_options={'polyline':True,'rectangle':True,'polygon':True,'circle':False,'marker':True}, edit_options={'edit': False}).add_to(m)
 
     table_rows = []
     for idx, t in enumerate(teams_data):
         if t.get('active') and 'lat' in t:
             color, emo, icon = get_status_info(t.get('last_seen'), now)
             p_color = PATH_COLORS[idx % len(PATH_COLORS)]
-            # בניית הטבלה לכל הצוותים
-            table_rows.append({
-                "סטטוס": emo,
-                "שם הצוות": t.get('name'),
-                "חברי צוות": ", ".join(t.get('members', [])) if t.get('members') else "לא הוזנו",
-                "עדכון אחרון": t.get('last_seen'),
-                "מיקום": f"{t['lat']:.4f}, {t['lon']:.4f}"
-            })
-            
+            table_rows.append({"סטטוס": emo, "שם הצוות": t.get('name'), "חברי צוות": ", ".join(t.get('members', [])) if t.get('members') else "לא הוזנו", "עדכון": t.get('last_seen'), "מיקום": f"{t['lat']:.4f}, {t['lon']:.4f}"})
             if sel_name == "הצג הכל" or t.get('name') == sel_name:
                 if 'history' in t and isinstance(t['history'], dict):
                     pts = [[p['lat'], p['lon']] for p in t['history'].values() if 'lat' in p]
                     if len(pts) > 1: folium.PolyLine(pts, color=p_color, weight=4, opacity=0.6).add_to(m)
                 folium.Marker([t['lat'], t['lon']], popup=t.get('name'), icon=folium.Icon(color=color, icon=icon, prefix="fa" if icon=="running" else "glyphicon")).add_to(m)
 
-    map_res = st_folium(m, height=500, key="MAP_STABLE_V7", use_container_width=True)
+    map_res = st_folium(m, height=520, key="V10_STABLE_MAP", use_container_width=True)
 
-    if st.session_state.edit_mode and map_res and map_res.get("all_drawings"):
-        if len(map_res["all_drawings"]) > (len(draw_db) if draw_db else 0):
-            db.reference('map_drawings').push(map_res["all_drawings"][-1])
+    # לוגיקת שמירה חכמה - שומר רק את האחרון שנוסף
+    if map_res and map_res.get("last_active_drawing"):
+        new_draw = map_res["last_active_drawing"]
+        # בדיקה אם הציור כבר קיים ב-DB למניעת כפילויות שמוחקות הכל
+        if new_draw and new_draw.get('geometry'):
+            db.reference('map_drawings').push(new_draw)
             st.rerun()
 
-# --- 6. טבלה וייצוא Excel (הוחזר למקומו) ---
+# --- 6. טבלה וייצוא Excel ---
 if table_rows:
     st.markdown("---")
     df = pd.DataFrame(table_rows)
-    
     col_met, col_btn = st.columns([1, 1])
     col_met.metric("צוותים פעילים", len(table_rows))
-    
-    # כפתור הייצוא המקורי
     csv = df.to_csv(index=False, encoding='utf-16', sep='\t').encode('utf-16')
-    col_btn.download_button(
-        label="📥 הורד דוח אקסל (CSV)",
-        data=csv,
-        file_name=f"shavtsakedem_report_{now.strftime('%d%m_%H%M')}.csv",
-        mime='text/csv'
-    )
-    
+    col_btn.download_button("📥 הורד דוח אקסל", data=csv, file_name=f"report_{now.strftime('%H%M')}.csv", mime='text/csv')
     st.dataframe(df, use_container_width=True, hide_index=True)
