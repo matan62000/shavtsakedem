@@ -135,7 +135,10 @@ if logo_base64:
 st.markdown("<h1 style='text-align: center;'>מערכת שבצ''קדם - ניהול כוחות</h1>", unsafe_allow_html=True)
 
 teams_data = get_teams_from_db()
-loc = get_geolocation()
+
+# --- שיפור דיוק המיקום: עדכון כל 5 שניות ודיוק גבוה ---
+loc = get_geolocation(component_key="geo", update_interval=5000)
+
 now = datetime.now(ISRAEL_TZ)
 
 col1, col2 = st.columns([1, 2])
@@ -154,11 +157,10 @@ with col1:
         if loc and 'coords' in loc:
             lat, lon = loc['coords']['latitude'], loc['coords']['longitude']
             if auto_up:
-                last_lat = st.session_state.get('last_lat_sent', 0)
-                if abs(last_lat - lat) > 0.00005: 
-                    if update_team_in_db(team_id, lat, lon):
-                        st.session_state.last_lat_sent = lat
-                st.info("🛰️ שידור חי פעיל")
+                # שידור חי רציף (הסרת בדיקת abs_lat לטובת אמינות בנסיעה)
+                if update_team_in_db(team_id, lat, lon):
+                    st.session_state.last_lat_sent = lat
+                st.info("🛰️ שידור חי פעיל - וודא שהמסך נשאר דולק")
             elif st.button("📍 עדכן מיקום ידני"):
                 update_team_in_db(team_id, lat, lon)
                 st.rerun()
@@ -209,7 +211,7 @@ with col2:
         if team.get('active') and 'lat' in team:
             status_color, emoji, icon_type = get_status_info(team.get('last_seen'), now)
             
-            # בחירת צבע נתיב ייחודי לצוות לפי האינדקס שלו ברשימה
+            # בחירת צבע נתיב ייחודי לצוות
             path_color = PATH_COLORS[idx % len(PATH_COLORS)]
             
             members_list = team.get('members', [])
@@ -227,7 +229,7 @@ with col2:
                         tooltip=f"מסלול: {team.get('name')}"
                     ).add_to(m)
 
-            # הוספת סמן למפה (צבע הסמן מעיד על סטטוס פעילות)
+            # הוספת סמן למפה
             folium.Marker(
                 [team['lat'], team['lon']],
                 popup=f"<b>{team.get('name')}</b><br>חברים: {members_str}<br>עדכון: {team.get('last_seen')}",
