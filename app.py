@@ -79,10 +79,12 @@ def update_team_in_db(team_id, lat, lon):
         current_time = datetime.now(ISRAEL_TZ).strftime("%H:%M:%S")
         ref = db.reference(f'teams/{team_id}')
         
+        # עדכון מיקום ראשי
         ref.update({
             'lat': lat, 'lon': lon, 'active': True, 'last_seen': current_time
         })
         
+        # הוספה להיסטוריה
         ref.child('history').push({
             'lat': lat, 'lon': lon, 'time': current_time
         })
@@ -185,13 +187,13 @@ st.markdown(f"""
     <div class="footer-credit">נוצר ע"י מתן בוחבוט</div>
     """, unsafe_allow_html=True)
 
-# --- 5. לוגיקה מרכזית של האפליקציה ---
+# --- 5. לוגיקה מרכזית ורענון חכם ---
 
-# מניעת רענון בזמן אינטראקציה עם המפה
-if "map_interaction" not in st.session_state:
-    st.session_state.map_interaction = False
+# מניעת רענון בזמן אינטראקציה עם המפה למניעת מסך לבן
+if "is_drawing_active" not in st.session_state:
+    st.session_state.is_drawing_active = False
 
-if not st.session_state.map_interaction:
+if not st.session_state.is_drawing_active:
     st_autorefresh(interval=12000, key="fscounter") # הגדלת מרווח ל-12 שניות ליציבות
 
 init_firebase()
@@ -233,7 +235,7 @@ with col1:
                         if update_team_in_db(team_id, lat, lon):
                             st.session_state.last_lat_sent = lat
                     st.info("🛰️ המערכת משדרת מיקום חי לחמ\"ל")
-                elif st.button("📍 עדכון מיקום ידני עכשיו"):
+                elif st.button("📍 עדכן מיקום ידני עכשיו"):
                     if update_team_in_db(team_id, lat, lon):
                         st.toast("המיקום עודכן בהצלחה!")
                         st.rerun()
@@ -346,8 +348,8 @@ with col2:
                     icon=folium.Icon(color=status_color, icon=icon_type, prefix="fa" if icon_type=="running" else "glyphicon")
                 ).add_to(m)
     
-    # הצגת המפה עם מנגנון שמירה
-    map_result = st_folium(m, width="100%", height=480, key="main_map_system")
+    # הצגת המפה עם מנגנון הגנה
+    map_result = st_folium(m, width="100%", height=480, key="main_map_system_365")
 
     # לוגיקה לשמירת ציורים חדשים
     if map_result and map_result.get("all_drawings"):
@@ -355,15 +357,15 @@ with col2:
         existing_count = len(draw_data) if draw_data else 0
         
         if len(all_drawings) > existing_count:
-            # עצירת רענון כדי למנוע מסך לבן בזמן הכתיבה
-            st.session_state.map_interaction = True
+            # הפעלת "נעילה" זמנית של הרענון בזמן השמירה
+            st.session_state.is_drawing_active = True
             new_shape = all_drawings[-1]
             try:
                 db.reference('map_drawings').push(new_shape)
-                st.session_state.map_interaction = False
+                st.session_state.is_drawing_active = False
                 st.rerun()
             except Exception:
-                st.session_state.map_interaction = False
+                st.session_state.is_drawing_active = False
 
 # --- 6. טבלה מסכמת ודוחות ---
 if table_rows:
@@ -382,7 +384,7 @@ if table_rows:
     m2.download_button(
         label='📥 הורד דוח פעילות (Excel)',
         data=csv_out,
-        file_name=f"shavtsakedem_report_{now.strftime('%H%M')}.csv",
+        file_name=f"shavtsakedem_report_{now.strftime('%d%m_%H%M')}.csv",
         mime='text/csv',
     )
     
