@@ -92,7 +92,7 @@ def update_team_in_db(team_id, lat, lon):
     except Exception:
         return False
 
-# --- 4. עיצוב ו-UI (CSS המלא והמפורט) ---
+# --- 4. עיצוב ו-UI (CSS המלא והמפורט - כל ה-90 שורות חזרו) ---
 
 logo_base64 = get_image_base64("kedem.png")
 bg_base64 = get_image_base64("kedem1.jpeg")
@@ -189,12 +189,12 @@ st.markdown(f"""
 
 # --- 5. לוגיקה מרכזית של האפליקציה ---
 
-# מניעת רענון בזמן אינטראקציה עם המפה למניעת מסך לבן
-if "is_drawing_active" not in st.session_state:
-    st.session_state.is_drawing_active = False
+# מניעת רענון בזמן אינטראקציה עם המפה
+if "map_interaction" not in st.session_state:
+    st.session_state.map_interaction = False
 
-if not st.session_state.is_drawing_active:
-    st_autorefresh(interval=12000, key="fscounter") # הגדלת מרווח ל-12 שניות ליציבות
+if not st.session_state.map_interaction:
+    st_autorefresh(interval=12000, key="fscounter")
 
 init_firebase()
 
@@ -343,22 +343,29 @@ with col2:
                 # הוספת סמן הצוות
                 folium.Marker(
                     [team['lat'], team['lon']],
-                    popup=f"<div style='direction:rtl; text-align:right;'><b>{team.get('name')}</b><br>חברים: {members_str}<br>עדכון: {team.get('last_seen')}</div>",
+                    popup=f"<div style='direction:rtl; text-align:right;'><b>{team.get('name')}</b><br>חברים: {members_str}<br>מיקום: {team['lat']:.4f}, {team['lon']:.4f}<br>עדכון: {team.get('last_seen')}</div>",
+                    tooltip=f"{team.get('name')} (נתיב {path_color})",
                     icon=folium.Icon(color=status_color, icon=icon_type, prefix="fa" if icon_type=="running" else "glyphicon")
                 ).add_to(m)
     
-    # הצגת המפה עם מנגנון הגנה נגד מסך לבן - Key חדש לגמרי
-    map_result = st_folium(m, width="100%", height=480, key="FINAL_STABLE_MAP")
+    # הצגת המפה - שימוש ב-Key קבוע וסטטי למניעת "פתיחה וסגירה"
+    map_result = st_folium(m, width=None, height=480, key="FINAL_FIX_STABLE_MAP", use_container_width=True)
 
     # לוגיקה לשמירת ציורים חדשים
     if map_result and map_result.get("all_drawings"):
         all_drawings = map_result["all_drawings"]
         existing_count = len(draw_data) if draw_data else 0
+        
         if len(all_drawings) > existing_count:
-            st.session_state.is_drawing_active = True
-            db.reference('map_drawings').push(all_drawings[-1])
-            st.session_state.is_drawing_active = False
-            st.rerun()
+            # עצירת רענון כדי למנוע מסך לבן בזמן הכתיבה
+            st.session_state.map_interaction = True
+            new_shape = all_drawings[-1]
+            try:
+                db.reference('map_drawings').push(new_shape)
+                st.session_state.map_interaction = False
+                st.rerun()
+            except Exception:
+                st.session_state.map_interaction = False
 
 # --- 6. טבלה מסכמת ודוחות ---
 if table_rows:
@@ -382,5 +389,3 @@ if table_rows:
     )
     
     st.dataframe(df, use_container_width=True, hide_index=True)
-
-# סוף קוד
