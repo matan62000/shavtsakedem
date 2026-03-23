@@ -56,7 +56,7 @@ def get_teams_from_db():
         return [v for v in ref.values() if v] if isinstance(ref, dict) else [t for t in ref if t]
     except: return []
 
-# --- 4. עיצוב CSS - מלבן לבן אחד אחורי ---
+# --- 4. עיצוב CSS - המלבן הלבן הרצוף (The White Card) ---
 logo_base64 = get_image_base64("kedem.png")
 bg_base64 = get_image_base64("kedem1.jpeg")
 bg_style = f"[data-testid='stAppViewContainer'] {{ background-image: url('data:image/png;base64,{bg_base64}'); background-size: cover; background-position: center; background-attachment: fixed; }}" if bg_base64 else ""
@@ -66,48 +66,70 @@ st.markdown(f"""
     @import url('https://fonts.googleapis.com/css2?family=Assistant:wght@400;700&display=swap');
     {bg_style}
     
-    /* מלבן לבן ראשי שעוטף הכל */
-    [data-testid="stVerticalBlock"] > div > div > [data-testid="stVerticalBlock"] {{
-        background-color: rgba(255, 255, 255, 0.94) !important;
-        padding: 30px !important;
-        border-radius: 25px !important;
-        box-shadow: 0 10px 40px rgba(0,0,0,0.3) !important;
-        margin-top: 20px !important;
-    }}
-    
-    /* ביטול המלבנים הקטנים שהיו קודם */
-    .stExpander, .stDataFrame, div[data-testid="stMetricBlock"] {{ 
-        background-color: white !important;
-        border: 1px solid #ddd !important;
-        box-shadow: none !important;
+    /* מחיקת כל רקע ברירת מחדל של Streamlit */
+    [data-testid="stHeader"], [data-testid="stVerticalBlock"] {{
+        background-color: transparent !important;
     }}
 
-    html, body, [data-testid="stSidebar"], .stMarkdown {{ direction: rtl; text-align: right; font-family: 'Assistant', sans-serif; }}
+    /* יצירת המלבן הלבן המרכזי שעוטף את כל גוף האתר */
+    .main .block-container {{
+        background-color: rgba(255, 255, 255, 0.95) !important;
+        margin-top: 40px !important;
+        margin-bottom: 40px !important;
+        padding: 40px !important;
+        border-radius: 30px !important;
+        box-shadow: 0 15px 50px rgba(0,0,0,0.4) !important;
+        max-width: 95% !important;
+    }}
+
+    /* עיצוב פנימי נקי */
+    .stExpander, .stDataFrame {{
+        border: 1px solid #e0e0e0 !important;
+        border-radius: 15px !important;
+        background-color: white !important;
+    }}
+
+    html, body, [data-testid="stSidebar"], .stMarkdown {{ 
+        direction: rtl; 
+        text-align: right; 
+        font-family: 'Assistant', sans-serif; 
+    }}
     
-    div.stButton > button {{ width: 100%; border-radius: 10px; font-weight: bold; background-color: #2e5a27; color: white; height: 3.2em; transition: 0.3s; }}
-    iframe {{ border-radius: 15px; border: 1px solid #ccc; }}
+    div.stButton > button {{ 
+        width: 100%; border-radius: 12px; font-weight: bold; 
+        background-color: #2e5a27; color: white; height: 3.5em; 
+        transition: all 0.3s ease; 
+    }}
     
-    .footer-credit {{ position: fixed; left: 15px; bottom: 15px; font-size: 0.75rem; color: rgba(0,0,0,0.6); background-color: rgba(255,255,255,0.4); padding: 2px 8px; border-radius: 5px; z-index: 100; }}
+    iframe {{ border-radius: 15px !important; }}
+    
+    .footer-credit {{ 
+        position: fixed; left: 15px; bottom: 15px; font-size: 0.75rem; 
+        color: rgba(0,0,0,0.6); background-color: rgba(255,255,255,0.4); 
+        padding: 2px 8px; border-radius: 5px; z-index: 100; 
+    }}
+    
     header, footer {{visibility: hidden;}}
     </style>
     <div class="footer-credit">נוצר ע"י מתן בוחבוט</div>
     """, unsafe_allow_html=True)
 
-# --- 5. לוגיקה ---
+# --- 5. לוגיקה וניהול רענון ---
 if "lock_refresh" not in st.session_state: st.session_state.lock_refresh = False
 if not st.session_state.lock_refresh:
     st_autorefresh(interval=15000, key="fscounter")
 
 init_firebase()
 
-# תוכן האפליקציה - הכל נכנס תחת הבלוק הראשי שיקבל את הרקע הלבן
+# --- תוכן האפליקציה (הכל בתוך המלבן הלבן האחד) ---
+
 if logo_base64: 
-    st.markdown(f'<div style="text-align: center;"><img src="data:image/png;base64,{logo_base64}" width="80"></div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="text-align: center;"><img src="data:image/png;base64,{logo_base64}" width="90"></div>', unsafe_allow_html=True)
 
 st.markdown("""
-<div style='text-align: center; margin-bottom: 20px;'>
-    <h1 style='margin: 0; font-size: 2.2rem; color: #1e3d1a;'>מערכת שבצ'קדם</h1>
-    <p style='color: #4a4a4a; font-size: 1rem; margin: 0; font-weight: bold;'>ניהול ושליטה בכוחות - נוצר ע"י מתן בוחבוט</p>
+<div style='text-align: center; margin-bottom: 30px;'>
+    <h1 style='margin: 0; font-size: 2.5rem; color: #1e3d1a;'>מערכת שבצ'קדם</h1>
+    <p style='color: #4a4a4a; font-size: 1.1rem; margin: 5px 0 0 0; font-weight: bold;'>ניהול ושליטה בכוחות - נוצר ע"י מתן בוחבוט</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -129,7 +151,7 @@ with col1:
 
     with st.expander("🛠️ ניהול חמ\"ל"):
         st.session_state.lock_refresh = st.checkbox("🔒 נעל רענון (לציור)", value=st.session_state.lock_refresh)
-        if st.button("🗑️ איפוס נתיבים"):
+        if st.button("🗑️ איפוס נתיבי תנועה"):
             ref = db.reference('teams').get()
             if ref:
                 for k in (ref.keys() if isinstance(ref, dict) else range(len(ref))):
@@ -172,7 +194,7 @@ with col2:
                     if len(pts) > 1: folium.PolyLine(pts, color=p_color, weight=4, opacity=0.6).add_to(m)
                 folium.Marker([t['lat'], t['lon']], popup=t.get('name'), icon=folium.Icon(color=color, icon=icon, prefix="fa" if icon=="running" else "glyphicon")).add_to(m)
 
-    map_res = st_folium(m, height=500, key="V12_FINAL_UI", use_container_width=True)
+    map_res = st_folium(m, height=520, key="V12_STABLE_MAP_FINAL", use_container_width=True)
 
     if map_res and map_res.get("last_active_drawing"):
         new_draw = map_res["last_active_drawing"]
