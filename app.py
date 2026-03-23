@@ -92,7 +92,7 @@ def update_team_in_db(team_id, lat, lon):
     except Exception:
         return False
 
-# --- 4. עיצוב ו-UI (CSS) ---
+# --- 4. עיצוב ו-UI (CSS המלא) ---
 
 logo_base64 = get_image_base64("kedem.png")
 bg_base64 = get_image_base64("kedem1.jpeg")
@@ -258,18 +258,19 @@ with col2:
 
     m = folium.Map(location=map_center, zoom_start=map_zoom)
 
-    # 1. טעינת ציורים מ-Firebase
+    # 1. טעינת ציורים מ-Firebase (בדיקה למניעת קריסה)
+    draw_ref = None
     try:
-        drawings = db.reference('map_drawings').get()
-        if drawings:
-            for d in drawings.values():
+        draw_ref = db.reference('map_drawings').get()
+        if draw_ref:
+            for d in draw_ref.values():
                 folium.GeoJson(d).add_to(m)
     except:
         pass
 
     # 2. הוספת כלי הציור
     Draw(
-        export=True,
+        export=False,
         draw_options={
             'polyline': True, 'rectangle': True, 'polygon': True, 'circle': True, 'marker': True
         },
@@ -278,18 +279,16 @@ with col2:
 
     table_rows = []
 
-    # 3. לולאה להוספת צוותים למפה ובניית הטבלה
+    # 3. לולאה להוספת צוותים למפה ובניית הטבלה המלאה
     for idx, team in enumerate(teams_data):
-        # פילטר ויזואלי למפה
-        is_visible = (selected_team == "הצג את כל הצוותים" or team.get('name') == selected_team)
-
+        # תמיד בונים את נתוני הטבלה לכל הצוותים הפעילים
         if team.get('active') and 'lat' in team:
             status_color, emoji, icon_type = get_status_info(team.get('last_seen'), now)
             path_color = PATH_COLORS[idx % len(PATH_COLORS)]
             members_list = team.get('members', [])
             members_str = ", ".join(members_list) if members_list else "אין רשימת חברים"
             
-            # הוספה לטבלה (תמיד, בלי קשר לסינון המפה)
+            # הוספה לטבלה המלאה (לדוח וגם לתצוגה)
             table_rows.append({
                 "סטטוס": emoji,
                 "שם הצוות": team.get('name'),
@@ -299,8 +298,8 @@ with col2:
                 "מיקום": f"{team['lat']:.4f}, {team['lon']:.4f}"
             })
 
-            # ציור על המפה רק אם הצוות נבחר או שכולם מוצגים
-            if is_visible:
+            # ציור על המפה רק לפי הסינון הנבחר
+            if selected_team == "הצג את כל הצוותים" or team.get('name') == selected_team:
                 # ציור נתיב (היסטוריה)
                 if 'history' in team and isinstance(team['history'], dict):
                     points = [[p['lat'], p['lon']] for p in team['history'].values() if 'lat' in p]
@@ -318,19 +317,21 @@ with col2:
                     icon=folium.Icon(color=status_color, icon=icon_type, prefix="fa" if icon_type=="running" else "glyphicon")
                 ).add_to(m)
     
-    # תצוגת המפה
-    output = st_folium(m, width="100%", height=400, key=f"main_map_{selected_team}")
+    # תצוגת המפה עם Key קבוע ליציבות
+    output = st_folium(m, width="100%", height=450, key="main_map_stable")
 
-    # שמירת ציור חדש ל-Firebase
-    if output.get("all_drawings"):
+    # שמירת ציור חדש ל-Firebase רק אם נוצר אחד כזה
+    if output and output.get("all_drawings"):
         all_draws = output["all_drawings"]
-        existing_count = len(drawings) if drawings else 0
+        existing_count = len(draw_ref) if draw_ref else 0
         if len(all_draws) > existing_count:
-            new_draw = all_draws[-1]
-            db.reference('map_drawings').push(new_draw)
-            st.rerun()
+            try:
+                db.reference('map_drawings').push(all_draws[-1])
+                st.rerun()
+            except:
+                pass
 
-# --- 6. טבלה ודוחות ---
+# --- 6. טבלה ודוחות (הגרסה המלאה) ---
 if table_rows:
     st.markdown("---")
     df = pd.DataFrame(table_rows)
@@ -342,7 +343,7 @@ if table_rows:
     c_met, c_down = st.columns([1, 1])
     c_met.metric("צוותים פעילים", len(table_rows))
     
-    # הורדת דוח
+    # הורדת דוח CSV בתצורת אקסל
     csv = df.to_csv(index=False, encoding='utf-16', sep='\t').encode('utf-16')
     c_down.download_button(
         label='📥 הורד דוח אקסל (CSV)',
