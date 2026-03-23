@@ -56,7 +56,7 @@ def get_teams_from_db():
         return [v for v in ref.values() if v] if isinstance(ref, dict) else [t for t in ref if t]
     except: return []
 
-# --- 4. עיצוב CSS המדויק (תיקון החלל הריק) ---
+# --- 4. עיצוב CSS - מלבן לבן אחד אחורי ---
 logo_base64 = get_image_base64("kedem.png")
 bg_base64 = get_image_base64("kedem1.jpeg")
 bg_style = f"[data-testid='stAppViewContainer'] {{ background-image: url('data:image/png;base64,{bg_base64}'); background-size: cover; background-position: center; background-attachment: fixed; }}" if bg_base64 else ""
@@ -66,23 +66,26 @@ st.markdown(f"""
     @import url('https://fonts.googleapis.com/css2?family=Assistant:wght@400;700&display=swap');
     {bg_style}
     
-    /* הפיכת הבלוקים הראשיים לשקופים כדי שלא ייווצר מלבן ריק */
-    [data-testid="stVerticalBlock"] {{ background-color: transparent !important; box-shadow: none !important; gap: 0.5rem !important; }}
-    
-    /* עיצוב המלבן הלבן עבור הכותרת, המפה, הפאנלים והטבלה */
-    .element-container, .stExpander, .stDataFrame, div[data-testid="stMetricBlock"], .leaflet-container {{
-        background-color: rgba(255, 255, 255, 0.92) !important;
-        border-radius: 15px !important;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
-        padding: 5px !important;
+    /* מלבן לבן ראשי שעוטף הכל */
+    [data-testid="stVerticalBlock"] > div > div > [data-testid="stVerticalBlock"] {{
+        background-color: rgba(255, 255, 255, 0.94) !important;
+        padding: 30px !important;
+        border-radius: 25px !important;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.3) !important;
+        margin-top: 20px !important;
     }}
     
-    /* תיקון מרווחים למפה */
-    iframe {{ border-radius: 15px; border: none; }}
+    /* ביטול המלבנים הקטנים שהיו קודם */
+    .stExpander, .stDataFrame, div[data-testid="stMetricBlock"] {{ 
+        background-color: white !important;
+        border: 1px solid #ddd !important;
+        box-shadow: none !important;
+    }}
 
     html, body, [data-testid="stSidebar"], .stMarkdown {{ direction: rtl; text-align: right; font-family: 'Assistant', sans-serif; }}
     
-    div.stButton > button {{ width: 100%; border-radius: 10px; font-weight: bold; background-color: #2e5a27; color: white; height: 3em; transition: 0.3s; }}
+    div.stButton > button {{ width: 100%; border-radius: 10px; font-weight: bold; background-color: #2e5a27; color: white; height: 3.2em; transition: 0.3s; }}
+    iframe {{ border-radius: 15px; border: 1px solid #ccc; }}
     
     .footer-credit {{ position: fixed; left: 15px; bottom: 15px; font-size: 0.75rem; color: rgba(0,0,0,0.6); background-color: rgba(255,255,255,0.4); padding: 2px 8px; border-radius: 5px; z-index: 100; }}
     header, footer {{visibility: hidden;}}
@@ -90,19 +93,21 @@ st.markdown(f"""
     <div class="footer-credit">נוצר ע"י מתן בוחבוט</div>
     """, unsafe_allow_html=True)
 
-# --- 5. לוגיקה וניהול רענון ---
+# --- 5. לוגיקה ---
 if "lock_refresh" not in st.session_state: st.session_state.lock_refresh = False
 if not st.session_state.lock_refresh:
     st_autorefresh(interval=15000, key="fscounter")
 
 init_firebase()
 
-# כותרת ולוגו בתוך מלבן מעוצב
-st.markdown(f"""
-<div style='background-color: rgba(255, 255, 255, 0.9); padding: 15px; border-radius: 20px; text-align: center; margin-bottom: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);'>
-    <img src="data:image/png;base64,{logo_base64}" width="70"><br>
-    <h1 style='margin: 0; font-size: 1.8rem; color: #1e3d1a;'>מערכת שבצ'קדם</h1>
-    <p style='margin: 0; font-size: 0.9rem; color: #4a4a4a; font-weight: bold;'>ניהול ושליטה בכוחות - נוצר ע"י מתן בוחבוט</p>
+# תוכן האפליקציה - הכל נכנס תחת הבלוק הראשי שיקבל את הרקע הלבן
+if logo_base64: 
+    st.markdown(f'<div style="text-align: center;"><img src="data:image/png;base64,{logo_base64}" width="80"></div>', unsafe_allow_html=True)
+
+st.markdown("""
+<div style='text-align: center; margin-bottom: 20px;'>
+    <h1 style='margin: 0; font-size: 2.2rem; color: #1e3d1a;'>מערכת שבצ'קדם</h1>
+    <p style='color: #4a4a4a; font-size: 1rem; margin: 0; font-weight: bold;'>ניהול ושליטה בכוחות - נוצר ע"י מתן בוחבוט</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -135,8 +140,7 @@ with col1:
             st.rerun()
 
 with col2:
-    # כותרת המפה בתוך רקע לבן לקריאות
-    st.markdown("<div style='background-color: white; padding: 5px 15px; border-radius: 10px; margin-bottom: 5px; display: inline-block;'><b>🌍 תמונת מצב</b></div>", unsafe_allow_html=True)
+    st.subheader("🌍 תמונת מצב")
     active_teams = [t for t in teams_data if t.get('active')]
     sel_name = st.selectbox("מיקוד בצוות:", ["הצג הכל"] + [t.get('name') for t in active_teams])
 
@@ -168,7 +172,7 @@ with col2:
                     if len(pts) > 1: folium.PolyLine(pts, color=p_color, weight=4, opacity=0.6).add_to(m)
                 folium.Marker([t['lat'], t['lon']], popup=t.get('name'), icon=folium.Icon(color=color, icon=icon, prefix="fa" if icon=="running" else "glyphicon")).add_to(m)
 
-    map_res = st_folium(m, height=520, key="V11_FINAL_STABLE", use_container_width=True)
+    map_res = st_folium(m, height=500, key="V12_FINAL_UI", use_container_width=True)
 
     if map_res and map_res.get("last_active_drawing"):
         new_draw = map_res["last_active_drawing"]
