@@ -65,12 +65,35 @@ st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Assistant:wght@400;700&display=swap');
     {bg_style}
+    
+    /* עיצוב בלוקים */
     [data-testid="stVerticalBlock"] {{ background-color: rgba(255, 255, 255, 0.92); padding: 20px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }}
+    
     html, body, [data-testid="stSidebar"], .stMarkdown {{ direction: rtl; text-align: right; font-family: 'Assistant', sans-serif; }}
+    
+    /* כפתורים */
     div.stButton > button {{ width: 100%; border-radius: 10px; font-weight: bold; background-color: #2e5a27; color: white; height: 3.5em; transition: 0.3s; }}
+    div.stButton > button:hover {{ background-color: #3e7a35; transform: translateY(-1px); }}
+    
+    /* מפה */
     iframe {{ min-height: 520px !important; border-radius: 10px; }}
+    
+    /* חתימה קבועה בפינה */
+    .footer-credit {{ 
+        position: fixed; 
+        left: 15px; 
+        bottom: 15px; 
+        font-size: 0.75rem; 
+        color: rgba(0,0,0,0.6); 
+        background-color: rgba(255,255,255,0.4); 
+        padding: 2px 8px; 
+        border-radius: 5px; 
+        z-index: 100; 
+    }}
+    
     header, footer {{visibility: hidden;}}
     </style>
+    <div class="footer-credit">נוצר ע"י מתן בוחבוט</div>
     """, unsafe_allow_html=True)
 
 # --- 5. לוגיקה וניהול רענון ---
@@ -79,7 +102,17 @@ if not st.session_state.lock_refresh:
     st_autorefresh(interval=15000, key="fscounter")
 
 init_firebase()
-if logo_base64: st.markdown(f'<div style="text-align: center;"><img src="data:image/png;base64,{logo_base64}" width="85"></div>', unsafe_allow_html=True)
+
+# כותרת ולוגו
+if logo_base64: 
+    st.markdown(f'<div style="text-align: center;"><img src="data:image/png;base64,{logo_base64}" width="85"></div>', unsafe_allow_html=True)
+
+st.markdown("""
+<div style='text-align: center;'>
+    <h1 style='margin-bottom: 0; font-size: 2.2rem; color: #1e3d1a;'>מערכת שבצ'קדם</h1>
+    <p style='color: #4a4a4a; font-size: 1rem; margin-top: 0; font-weight: bold;'>ניהול ושליטה בכוחות - נוצר ע"י מתן בוחבוט</p>
+</div>
+""", unsafe_allow_html=True)
 
 teams_data = get_teams_from_db()
 loc = get_geolocation()
@@ -92,6 +125,7 @@ with col1:
         u_code = st.text_input("קוד מפקד:", type="password")
         team = next((t for t in teams_data if str(t.get('code')) == u_code), None)
         if team and loc and 'coords' in loc:
+            st.success(f"זוהה: {team.get('name')}")
             if st.button("📍 עדכן מיקום עכשיו"):
                 db.reference(f'teams/{team.get("id")}').update({'lat': loc['coords']['latitude'], 'lon': loc['coords']['longitude'], 'active': True, 'last_seen': now.strftime("%H:%M:%S")})
                 st.rerun()
@@ -120,12 +154,10 @@ with col2:
 
     m = folium.Map(location=[m_lat, m_lon], zoom_start=m_zoom, control_scale=True)
     
-    # טעינת ציורים עם הגנה משופרת
     draw_db = db.reference('map_drawings').get()
     if draw_db:
         for d in draw_db.values():
             try:
-                # מוודא שהציור לא ריק לפני הוספה
                 if d and 'geometry' in d:
                     folium.GeoJson(d, style_function=lambda x: {'fillColor': 'orange', 'color': 'orange', 'weight': 2}).add_to(m)
             except: continue
@@ -146,10 +178,8 @@ with col2:
 
     map_res = st_folium(m, height=520, key="V10_STABLE_MAP", use_container_width=True)
 
-    # לוגיקת שמירה חכמה - שומר רק את האחרון שנוסף
     if map_res and map_res.get("last_active_drawing"):
         new_draw = map_res["last_active_drawing"]
-        # בדיקה אם הציור כבר קיים ב-DB למניעת כפילויות שמוחקות הכל
         if new_draw and new_draw.get('geometry'):
             db.reference('map_drawings').push(new_draw)
             st.rerun()
