@@ -82,8 +82,8 @@ st.markdown(f"""
     html, body, [data-testid="stSidebar"], .stMarkdown {{ direction: rtl; text-align: right; font-family: 'Assistant', sans-serif; }}
     @media (max-width: 768px) {{ .stDeployButton {{display:none;}} #MainMenu, header, footer {{visibility: hidden;}} [data-testid="stVerticalBlock"] {{ padding: 10px; }} }}
     div.stButton > button {{ width: 100%; border-radius: 10px; font-weight: bold; background-color: #2e5a27; color: white; height: 3.5em; transition: 0.3s; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }}
-    div.stButton > button:hover {{ background-color: #3e7a35; box-shadow: 0 4px 8px rgba(0,0,0,0.2); transform: translateY(-1px); }}
-    .footer-credit {{ position: fixed; left: 15px; bottom: 15px; font-size: 0.75rem; color: rgba(0,0,0,0.6); z-index: 100; }}
+    div.stButton > button:hover {{ background-color: #3e7a35; transform: translateY(-1px); }}
+    .footer-credit {{ position: fixed; left: 15px; bottom: 15px; font-size: 0.75rem; color: rgba(0,0,0,0.6); background-color: rgba(255,255,255,0.4); padding: 2px 8px; border-radius: 5px; z-index: 100; }}
     header, footer {{visibility: hidden;}}
     .stDataFrame {{ border-radius: 10px; overflow: hidden; }}
     </style>
@@ -92,13 +92,19 @@ st.markdown(f"""
 
 # --- 5. לוגיקה מרכזית ---
 
-# מנגנון השהיית רענון למניעת מסך לבן
 if "is_drawing" not in st.session_state: st.session_state.is_drawing = False
 if not st.session_state.is_drawing: st_autorefresh(interval=15000, key="fscounter")
 
 init_firebase()
 if logo_base64: st.markdown(f'<div style="text-align: center;"><img src="data:image/png;base64,{logo_base64}" width="85"></div>', unsafe_allow_html=True)
-st.markdown("<div style='text-align: center;'><h1 style='margin-bottom: 0; font-size: 2rem; color: #1e3d1a;'>מערכת שבצ'קדם</h1><p style='color: #4a4a4a; font-size: 0.9rem; margin-top: 0; font-weight: bold;'>ניהול ושליטה בכוחות - נוצר ע"י מתן בוחבוט</p></div>", unsafe_allow_html=True)
+
+# --- השורה המתוקנת (שורה 101 המקורית) ---
+st.markdown("""
+<div style='text-align: center;'>
+    <h1 style='margin-bottom: 0; font-size: 2rem; color: #1e3d1a;'>מערכת שבצ'קדם</h1>
+    <p style='color: #4a4a4a; font-size: 0.9rem; margin-top: 0; font-weight: bold;'>ניהול ושליטה בכוחות - נוצר ע"י מתן בוחבוט</p>
+</div>
+""", unsafe_allow_html=True)
 
 teams_data = get_teams_from_db()
 loc = get_geolocation()
@@ -147,12 +153,10 @@ with col2:
 
     m = folium.Map(location=[m_lat, m_lon], zoom_start=m_zoom, control_scale=True)
     
-    # טעינת סימונים עם הגנה (Try/Except) למניעת קריסת המפה
     draw_db = db.reference('map_drawings').get()
     if draw_db:
         for d_key in draw_db:
-            try:
-                folium.GeoJson(draw_db[d_key]).add_to(m)
+            try: folium.GeoJson(draw_db[d_key]).add_to(m)
             except: continue
 
     Draw(export=False, draw_options={'polyline':True,'rectangle':True,'polygon':True,'circle':False,'marker':True}, edit_options={'edit':False}).add_to(m)
@@ -161,17 +165,16 @@ with col2:
     for idx, team in enumerate(teams_data):
         if team.get('active') and 'lat' in team:
             status_color, emoji, icon_type = get_status_info(team.get('last_seen'), now)
-            path_color = PATH_COLORS[idx % len(PATH_COLORS)]
+            p_color = PATH_COLORS[idx % len(PATH_COLORS)]
             m_str = ", ".join(team.get('members', [])) if team.get('members') else "לא הוזנו חברים"
-            table_rows.append({"סטטוס": emoji, "שם הצוות": team.get('name'), "צבע נתיב": path_color, "חברי צוות": m_str, "עדכון אחרון": team.get('last_seen'), "מיקום": f"{team['lat']:.4f}, {team['lon']:.4f}"})
+            table_rows.append({"סטטוס": emoji, "שם הצוות": team.get('name'), "צבע נתיב": p_color, "חברי צוות": m_str, "עדכון אחרון": team.get('last_seen'), "מיקום": f"{team['lat']:.4f}, {team['lon']:.4f}"})
             
             if sel_team == "הצג את כל הצוותים" or team.get('name') == sel_team:
                 if 'history' in team and isinstance(team['history'], dict):
                     pts = [[p['lat'], p['lon']] for p in team['history'].values() if 'lat' in p]
-                    if len(pts) > 1: folium.PolyLine(pts, color=path_color, weight=4, opacity=0.6).add_to(m)
+                    if len(pts) > 1: folium.PolyLine(pts, color=p_color, weight=4, opacity=0.6).add_to(m)
                 folium.Marker([team['lat'], team['lon']], popup=team.get('name'), icon=folium.Icon(color=status_color, icon=icon_type, prefix="fa" if icon_type=="running" else "glyphicon")).add_to(m)
     
-    # הצגת המפה עם רוחב אוטומטי מלא ו-Key יציב
     map_res = st_folium(m, width=None, height=480, key="FINAL_SAFE_MAP", use_container_width=True)
 
     if map_res and map_res.get("all_drawings"):
